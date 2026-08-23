@@ -13,8 +13,13 @@ import {
   Check,
   FileText,
   ExternalLink,
+  Sparkles,
+  Mail,
+  Send,
   MessageCircle,
-  Sparkles
+  Bluetooth,
+  Smartphone,
+  X
 } from 'lucide-react';
 import { InterpretationResponse, LanguageMode } from '../types';
 import { generateInterpretationPDF } from '../utils/pdfGenerator';
@@ -39,6 +44,120 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
   const [copiedText, setCopiedText] = useState(false);
   const [copiedQuestionIndex, setCopiedQuestionIndex] = useState<number | null>(null);
   const [showRawTextModal, setShowRawTextModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [bluetoothStatus, setBluetoothStatus] = useState<string>('');
+
+  // Generate complete text for sharing
+  const generateShareText = () => {
+    let text = `UFARANUZI WA RIPOTI YA HOSPITALI / RADIOLOGY REPORT SUMMARY\n`;
+    text += `=========================================\n`;
+    text += `Kipimo / Modality: ${data.modality_sw || data.modality} (${data.bodyRegion_sw || data.bodyRegion})\n\n`;
+
+    if (isSwahili) {
+      text += `MUHTASARI WA KISWAHILI:\n${data.overallSummary_sw}\n\n`;
+      text += `MATOKEO MUHIMU:\n`;
+      data.keyFindings.forEach((f, idx) => {
+        text += `${idx + 1}. ${f.title_sw}: ${f.explanation_sw}\n`;
+      });
+      text += `\n`;
+    }
+
+    if (isEnglish) {
+      text += `ENGLISH SUMMARY:\n${data.overallSummary_en}\n\n`;
+      text += `KEY FINDINGS:\n`;
+      data.keyFindings.forEach((f, idx) => {
+        text += `${idx + 1}. ${f.title_en}: ${f.explanation_en}\n`;
+      });
+      text += `\n`;
+    }
+
+    text += `TAHADHARI: Ufafanuzi huu unaelimisha kuhusu maneno ya ripoti ya daktari na hautoi prognosis au ushauri wa tiba. Wasiliana na daktari wako.\n`;
+    return text;
+  };
+
+  // 1. WhatsApp Sharing
+  const handleShareWhatsApp = () => {
+    const briefText = `*Ufafanuzi wa Ripoti ya Radiology: ${data.modality} (${data.bodyRegion})*\n\n${isSwahili ? `*Muhtasari wa Kiswahili:*\n${data.overallSummary_sw}\n\n` : ''}${isEnglish ? `*English Summary:*\n${data.overallSummary_en}\n\n` : ''}_Kumbuka: Wasiliana na daktari wako kwa matibabu kamili._`;
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(briefText)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // 2. Email Sharing
+  const handleShareEmail = () => {
+    const subject = encodeURIComponent(`Ufafanuzi wa Ripoti ya Radiology: ${data.modality}`);
+    const body = encodeURIComponent(generateShareText());
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  // 3. Telegram Sharing
+  const handleShareTelegram = () => {
+    const briefText = `*Ufafanuzi wa Ripoti ya Hospitali: ${data.modality}*\n\n${isSwahili ? data.overallSummary_sw : data.overallSummary_en}\n\n_Kumbuka: Wasiliana na daktari wako kwa matibabu kamili._`;
+    const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(briefText)}`;
+    window.open(telegramUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  // 3. Bluetooth / Nearby Device Sharing
+  const handleShareBluetooth = async () => {
+    const fullText = generateShareText();
+    const fileName = `Ufafanuzi_Ripoti_${data.modality.replace(/\s+/g, '_')}.txt`;
+
+    // Try Web Share API with file or text (which prompts Bluetooth / Nearby Share / AirDrop on Android/iOS/Windows/Mac)
+    if (navigator.share) {
+      try {
+        const file = new File([fullText], fileName, { type: 'text/plain' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Ripoti - ${data.modality}`,
+            text: fullText,
+          });
+          setBluetoothStatus(isSwahili ? 'Imetumwa!' : 'Sent successfully!');
+          setTimeout(() => setBluetoothStatus(''), 3000);
+          return;
+        } else {
+          await navigator.share({
+            title: `Ripoti - ${data.modality}`,
+            text: fullText,
+          });
+          setBluetoothStatus(isSwahili ? 'Imeshirikiwa!' : 'Shared successfully!');
+          setTimeout(() => setBluetoothStatus(''), 3000);
+          return;
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    // Fallback for devices: download summary text file ready for instant Bluetooth sending
+    const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setBluetoothStatus(
+      isSwahili
+        ? 'Faili limepakuliwa! Unaweza kulisambaza sasa kupitia Bluetooth kwenye kifaa chako.'
+        : 'File downloaded! You can now send it via Bluetooth from your device manager.'
+    );
+    setTimeout(() => setBluetoothStatus(''), 6000);
+  };
+
+  // 4. Copy to Clipboard
+  const handleCopySummary = async () => {
+    const text = generateShareText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedText(true);
+      setTimeout(() => setCopiedText(false), 3000);
+    } catch {
+      // ignore
+    }
+  };
 
   // Audio Speech Reader (TTS)
   const handleToggleSpeech = () => {
@@ -106,12 +225,6 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
     }
   };
 
-  const handleWhatsAppShare = () => {
-    const shareText = `*Tanzania Radiology Report Interpretation / Ufafanuzi wa Ripoti ya Eksirei*\n\n*Kipimo / Modality:* ${data.modality} (${data.modality_sw || ''})\n*Sehemu / Region:* ${data.bodyRegion}\n\n*Muhtasari wa Kiswahili:*\n${data.overallSummary_sw}\n\n*English Summary:*\n${data.overallSummary_en}\n\n_Kumbuka: Onana na daktari wako kwa matibabu kamili._`;
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-  };
-
   const handleCopyQuestion = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
     setCopiedQuestionIndex(index);
@@ -155,15 +268,15 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             <span>{isSpeaking ? (isSwahili ? 'Sitisha' : 'Stop') : (isSwahili ? 'Soma kwa Sauti' : 'Audio')}</span>
           </button>
 
-          {/* WhatsApp */}
+          {/* Quick Share Modal Trigger */}
           <button
-            id="btn-share-whatsapp"
+            id="btn-quick-share"
             type="button"
-            onClick={handleWhatsAppShare}
-            className="px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-emerald-600 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+            onClick={() => setShowShareModal(true)}
+            className="px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5"
           >
-            <MessageCircle className="w-4 h-4" />
-            <span>WhatsApp</span>
+            <Share2 className="w-3.5 h-3.5 text-[#00A3DD]" />
+            <span>{isSwahili ? 'Sambaza' : 'Share'}</span>
           </button>
 
           {/* New Report */}
@@ -379,20 +492,11 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
           <button
             id="btn-share"
             type="button"
-            onClick={handleShare}
+            onClick={() => setShowShareModal(true)}
             className="flex-1 py-3.5 border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-98"
           >
-            {copiedText ? (
-              <>
-                <Check className="w-4 h-4 text-[#1EB53A]" />
-                <span>{isSwahili ? 'Imenakiliwa!' : 'Copied!'}</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-4 h-4 text-[#00A3DD]" />
-                <span>{isSwahili ? 'Sambaza / Shiriki' : 'Share'}</span>
-              </>
-            )}
+            <Share2 className="w-4 h-4 text-[#00A3DD]" />
+            <span>{isSwahili ? 'Sambaza / Shiriki' : 'Share Options'}</span>
           </button>
         </div>
       </div>
@@ -416,6 +520,225 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             <span>{isSwahili ? 'Angalia Maandishi' : 'View Text'}</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* SHARE OPTIONS MODAL (Email, Telegram, Bluetooth, Copy, System) */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border-2 border-slate-200 flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b-2 border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#00A3DD]/10 flex items-center justify-center text-[#00A3DD]">
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {isSwahili ? 'Chaguo za Kusambaza Ripoti' : 'Share Report Interpretation'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {isSwahili ? 'Chagua njia unayopenda kushiriki matokeo' : 'Choose how you want to share findings'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setBluetoothStatus('');
+                }}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body - Options */}
+            <div className="p-6 space-y-3 max-h-[70vh] overflow-y-auto">
+              {bluetoothStatus && (
+                <div className="p-3 bg-emerald-50 border-2 border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-[#1EB53A] shrink-0" />
+                  <span>{bluetoothStatus}</span>
+                </div>
+              )}
+
+              {/* 1. WHATSAPP */}
+              <button
+                id="btn-share-whatsapp"
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-[#25D366] hover:bg-emerald-50/40 transition flex items-center gap-3.5 group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#25D366]/10 border border-[#25D366]/30 text-[#25D366] flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <MessageCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">WhatsApp</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      {isSwahili ? 'Maarufu' : 'Popular'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {isSwahili
+                      ? 'Tuma muhtasari wa ripoti moja kwa moja kwa WhatsApp'
+                      : 'Send report summary directly to contacts or doctors on WhatsApp'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 2. EMAIL */}
+              <button
+                id="btn-share-email"
+                type="button"
+                onClick={handleShareEmail}
+                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition flex items-center gap-3.5 group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">
+                      {isSwahili ? 'Barua Pepe (Email)' : 'Email'}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800">
+                      {isSwahili ? 'Kamili' : 'Full Text'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {isSwahili
+                      ? 'Fungua app yako ya barua pepe na maelezo kamili'
+                      : 'Open default email app with complete interpretation'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 2. TELEGRAM */}
+              <button
+                id="btn-share-telegram"
+                type="button"
+                onClick={handleShareTelegram}
+                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-sky-300 hover:bg-sky-50/40 transition flex items-center gap-3.5 group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">Telegram</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 text-sky-800">
+                      {isSwahili ? 'Mtandao' : 'Chat'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {isSwahili
+                      ? 'Tuma muhtasari kwa daktari au ndugu kupitia Telegram'
+                      : 'Send concise report summary to contacts on Telegram'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 3. BLUETOOTH / NEARBY WIRELESS */}
+              <button
+                id="btn-share-bluetooth"
+                type="button"
+                onClick={handleShareBluetooth}
+                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-center gap-3.5 group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <Bluetooth className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">
+                      {isSwahili ? 'Bluetooth / Vifaa vya Karibu' : 'Bluetooth & Nearby Share'}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                      {isSwahili ? 'Bila Intaneti' : 'Offline / Direct'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {isSwahili
+                      ? 'Sambaza faili ya maandishi kwa simu au kompyuta iliyo karibu'
+                      : 'Send text report file directly to nearby paired device'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 4. COPY TEXT */}
+              <button
+                id="btn-share-copy"
+                type="button"
+                onClick={handleCopySummary}
+                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40 transition flex items-center gap-3.5 group"
+              >
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-[#1EB53A] flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  {copiedText ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">
+                      {copiedText
+                        ? (isSwahili ? 'Imenakiliwa kwenye Clipboard!' : 'Copied to Clipboard!')
+                        : (isSwahili ? 'Nakili Maandishi Yote' : 'Copy All Text')}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                      {copiedText ? 'OK' : 'Clipboard'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {isSwahili
+                      ? 'Nakili muhtasari wote ili uubandike popote'
+                      : 'Copy full summary & findings to paste anywhere'}
+                  </p>
+                </div>
+              </button>
+
+              {/* 5. SYSTEM / NATIVE SHARE (If available) */}
+              {typeof navigator !== 'undefined' && navigator.share && (
+                <button
+                  id="btn-share-system"
+                  type="button"
+                  onClick={handleShare}
+                  className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition flex items-center gap-3.5 group"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-300 text-slate-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-slate-900">
+                        {isSwahili ? 'Chaguo Zaidi za Simu' : 'Device System Menu'}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800">
+                        {isSwahili ? 'Simu' : 'Native'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      {isSwahili
+                        ? 'Fungua menyu kamili ya programu zote kwenye simu yako'
+                        : 'Open device share sheet for all installed apps'}
+                    </p>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t-2 border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+              <span>{isSwahili ? 'Faragha 100% (Haihifadhiwi)' : '100% Private (Zero Storage)'}</span>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setBluetoothStatus('');
+                }}
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-slate-800 transition"
+              >
+                {isSwahili ? 'Funga' : 'Close'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

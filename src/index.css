@@ -1,1 +1,45 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;0,900;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --primary-color: #1EB53A;
+  --secondary-color: #00A3DD;
+  --accent-color: #FCD116;
+  --dark-color: #0f172a;
+  --bg-color: #ffffff;
+  --card-bg-color: #ffffff;
+}
+
+.font-jakarta {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+.font-serif-custom {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-rounded-custom {
+  font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+}
+
+.font-mono-custom {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.font-sans-custom {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Background Pattern Presets */
+.bg-pattern-dots {
+  background-image: radial-gradient(rgba(100, 116, 139, 0.15) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-pattern-glow {
+  background-image: radial-gradient(circle at 50% 0%, rgba(30, 181, 58, 0.08) 0%, rgba(0, 163, 221, 0.06) 40%, transparent 80%);
+}
+
+.bg-pattern-gradient {
+  background-image: linear-gradient(180deg, rgba(248, 250, 252, 0.8) 0%, rgba(241, 245, 249, 1) 100%);
+}

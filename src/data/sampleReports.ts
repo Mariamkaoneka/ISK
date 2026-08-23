@@ -3,11 +3,11 @@ import { SampleReport } from '../types';
 export const SAMPLE_REPORTS: SampleReport[] = [
   {
     id: 'chest-xray-1',
-    title_en: 'Chest X-Ray (PA View) - Cough & Fever',
-    title_sw: 'X-Ray ya Kifua - Kikohozi na Homa',
-    category: 'X-Ray / Eksirei',
-    description_en: 'Routine chest radiograph showing right lower lobe opacity suggestive of mild infection.',
-    description_sw: 'Picha ya eksirei ya kifua inayoonyesha dalili za maambukizi madogo upande wa kulia wa pafu.',
+    title_en: 'Chest X-Ray Report - Cough & Fever',
+    title_sw: 'Ripoti ya X-Ray ya Kifua - Kikohozi na Homa',
+    category: 'X-Ray Report',
+    description_en: 'Sample written report document showing right lower lobe findings.',
+    description_sw: 'Mfano wa ripoti ya maandishi ya daktari kuhusu maambukizi madogo ya pafu.',
     text: `EXAMINATION: CHEST RADIOGRAPH (PA VIEW)
 PATIENT INDICATION: 34-year-old presenting with 4-day history of productive cough, fever, and right-sided pleuritic chest discomfort.
 
@@ -23,11 +23,11 @@ Focal consolidation in the right lower lobe, most consistent with community-acqu
   },
   {
     id: 'ultrasound-abdo',
-    title_en: 'Abdominal Ultrasound - Right Upper Quadrant Pain',
-    title_sw: 'Ultrasound ya Tumbo - Maumivu ya Upande wa Kulia',
-    category: 'Ultrasound / Altrasaundi',
-    description_en: 'Ultrasound scan of the upper abdomen showing mild fatty liver and small non-obstructing gallstones.',
-    description_sw: 'Vipimo vya ultrasound ya tumbo vinavyoonyesha vijiwe vidogo kwenye kifuko cha nyongo.',
+    title_en: 'Abdominal Ultrasound Report - RUQ Pain',
+    title_sw: 'Ripoti ya Ultrasound ya Tumbo - Maumivu ya Kulia',
+    category: 'Ultrasound Report',
+    description_en: 'Sample written report document detailing liver and gallbladder findings.',
+    description_sw: 'Mfano wa ripoti ya maandishi ya daktari ya vipimo vya ultrasound ya tumbo.',
     text: `EXAMINATION: ABDOMINAL ULTRASONOGRAPHY
 CLINICAL NOTES: 46-year-old with recurrent postprandial epigastric and right hypochondriac discomfort.
 
@@ -44,11 +44,11 @@ IMPRESSION:
   },
   {
     id: 'mri-lumbar',
-    title_en: 'Lumbar Spine MRI - Lower Back Pain & Sciatica',
-    title_sw: 'MRI ya Mgongo wa Chini - Maumivu ya Kiuno',
-    category: 'MRI / Em-Ar-Ai',
-    description_en: 'Magnetic resonance imaging of lumbar spine evaluating back pain radiating to left leg.',
-    description_sw: 'Picha ya MRI ya uti wa mgongo inayochunguza sababu ya maumivu ya kiuno.',
+    title_en: 'Lumbar Spine MRI Report - Back Pain',
+    title_sw: 'Ripoti ya MRI ya Mgongo wa Chini - Maumivu ya Kiuno',
+    category: 'MRI Report',
+    description_en: 'Sample written report document evaluating lumbar vertebrae and disc findings.',
+    description_sw: 'Mfano wa ripoti ya maandishi ya daktari inayoelezea matokeo ya MRI ya mgongo.',
     text: `EXAMINATION: MRI OF LUMBAR SPINE (WITHOUT CONTRAST)
 CLINICAL HISTORY: 52-year-old with chronic lower back pain radiating down the posterior left thigh and calf.
 
@@ -66,11 +66,11 @@ IMPRESSION:
   },
   {
     id: 'knee-xray',
-    title_en: 'Knee Radiograph - Knee Stiffness & Pain',
-    title_sw: 'X-Ray ya Goti - Maumivu na Kukaza kwa Goti',
-    category: 'X-Ray / Eksirei',
-    description_en: 'Weight-bearing radiograph of the knee joint evaluating joint space.',
-    description_sw: 'Picha ya eksirei ya goti inayoonyesha uchakavu wa kawaida wa viungo (osteoarthritis).',
+    title_en: 'Knee Radiograph Report - Joint Stiffness',
+    title_sw: 'Ripoti ya X-Ray ya Goti - Maumivu na Kukaza',
+    category: 'X-Ray Report',
+    description_en: 'Sample written report document evaluating joint space and cartilage.',
+    description_sw: 'Mfano wa ripoti ya maandishi ya daktari kuhusu uchakavu wa viungo.',
     text: `EXAMINATION: RIGHT KNEE AP AND LATERAL RADIOGRAPHS (WEIGHT-BEARING)
 INDICATION: 61-year-old with progressive right knee pain on walking and morning stiffness.
 

@@ -124,12 +124,12 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-black text-slate-900">
-                {isSwahili ? 'Piga Picha ya Ripoti' : 'Capture Radiology Report Photo'}
+                {isSwahili ? 'Piga Picha ya Karatasi ya Ripoti' : 'Capture Radiology Report Document'}
               </h3>
               <p className="text-[11px] text-slate-500 font-medium">
                 {isSwahili
-                  ? 'Weka karatasi ya ripoti au filamu ya eksirei iwe wazi'
-                  : 'Align the paper report or scan film inside the frame'}
+                  ? 'Weka karatasi ya ripoti ya daktari ndani ya fremu'
+                  : 'Align the paper report document inside the frame'}
               </p>
             </div>
           </div>

@@ -1,17 +1,70 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ReportInputSection } from './components/ReportInputSection';
 import { InterpretationDashboard } from './components/InterpretationDashboard';
-import { InterpretationResponse, LanguageMode } from './types';
-import { ShieldCheck, Heart, Info, AlertCircle, Stethoscope } from 'lucide-react';
+import { OwnerInterface } from './components/OwnerInterface';
+import { InterpretationResponse, LanguageMode, UserRole, OwnerSettings } from './types';
+import { DEFAULT_OWNER_SETTINGS } from './data/defaultOwnerSettings';
+import { ShieldCheck, Heart, Info, AlertCircle, Stethoscope, Sliders } from 'lucide-react';
+
+const STORAGE_KEY = 'afya_radiology_owner_settings';
 
 export default function App() {
+  const [userRole, setUserRole] = useState<UserRole>('user');
   const [languageMode, setLanguageMode] = useState<LanguageMode>('both');
   const [isLoading, setIsLoading] = useState(false);
   const [interpretation, setInterpretation] = useState<InterpretationResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastPayload, setLastPayload] = useState<{
+    text?: string;
+    imageBase64?: string;
+    mimeType?: string;
+  } | null>(null);
 
+  // Load Owner Settings from localStorage or use defaults
+  const [settings, setSettings] = useState<OwnerSettings>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const textObj = { ...DEFAULT_OWNER_SETTINGS.text, ...parsed.text };
+        if (textObj.brandTagline_sw === 'Ufafanuzi Rahisi wa Ripoti za Eksirei & Ultrasound') {
+          textObj.brandTagline_sw = '';
+        }
+        if (textObj.heroHeading_sw === 'Ufafanuzi Rahisi wa Ripoti za Eksirei & Ultrasound') {
+          textObj.heroHeading_sw = '';
+        }
+        return {
+          theme: { ...DEFAULT_OWNER_SETTINGS.theme, ...parsed.theme },
+          text: textObj,
+        };
+      }
+    } catch (e) {
+      console.warn('Could not load owner settings from storage:', e);
+    }
+    return DEFAULT_OWNER_SETTINGS;
+  });
+
+  const { theme, text } = settings;
   const isSwahili = languageMode === 'sw' || languageMode === 'both';
+
+  // Save settings persistently
+  const handleSaveSettings = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.error('Failed to persist owner settings to localStorage:', e);
+    }
+  };
+
+  const handleResetDefaults = () => {
+    setSettings(DEFAULT_OWNER_SETTINGS);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      console.error('Failed to reset storage:', e);
+    }
+  };
 
   const handleInterpret = async (payload: {
     text?: string;
@@ -20,6 +73,7 @@ export default function App() {
   }) => {
     setIsLoading(true);
     setErrorMessage(null);
+    setLastPayload(payload);
 
     try {
       const response = await fetch('/api/interpret', {
@@ -37,6 +91,7 @@ export default function App() {
 
       const resultData: InterpretationResponse = await response.json();
       setInterpretation(resultData);
+      setLastPayload(null);
       // Smooth scroll to top of interpretation
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
@@ -57,148 +112,267 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Font family selector class
+  const getFontClass = () => {
+    switch (theme.fontFamily) {
+      case 'jakarta':
+        return 'font-jakarta';
+      case 'serif':
+        return 'font-serif-custom';
+      case 'rounded':
+        return 'font-rounded-custom';
+      case 'mono':
+        return 'font-mono-custom';
+      case 'sans':
+      default:
+        return 'font-sans-custom';
+    }
+  };
+
+  // Typographic scale sizing class
+  const getScaleClass = () => {
+    switch (theme.fontSizeScale) {
+      case 'compact':
+        return 'text-[93%]';
+      case 'spacious':
+        return 'text-[106%]';
+      case 'standard':
+      default:
+        return 'text-[100%]';
+    }
+  };
+
+  // Background pattern class
+  const getPatternClass = () => {
+    switch (theme.bgPattern) {
+      case 'dots':
+        return 'bg-pattern-dots';
+      case 'glow':
+        return 'bg-pattern-glow';
+      case 'gradient':
+        return 'bg-pattern-gradient';
+      case 'none':
+      default:
+        return '';
+    }
+  };
+
+  // Heading weight class
+  const getHeadingWeightClass = () => {
+    switch (theme.headingWeight) {
+      case 'bold':
+        return 'font-bold';
+      case 'extrabold':
+        return 'font-extrabold';
+      case 'black':
+      default:
+        return 'font-black';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-white text-slate-900 flex flex-col font-sans selection:bg-[#1EB53A]/20 selection:text-emerald-900">
-      {/* Top Header */}
+    <div
+      className={`min-h-screen flex flex-col transition-colors ${getFontClass()} ${getScaleClass()} ${getPatternClass()}`}
+      style={{
+        backgroundColor: theme.backgroundColor || '#ffffff',
+        color: theme.textColor || '#0f172a',
+      }}
+    >
+      {/* Top Header with Role Switcher */}
       <Header
         languageMode={languageMode}
         onLanguageChange={(mode) => setLanguageMode(mode)}
+        userRole={userRole}
+        onRoleChange={setUserRole}
+        settings={settings}
       />
 
-      {/* Main Container */}
+      {/* Main Content Area */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 sm:px-6 sm:py-8 space-y-6">
-        {/* Tanzanian Patient Welcome & Quick Context */}
-        {!interpretation && (
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-2">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#1EB53A]/10 text-[#1EB53A] border-2 border-[#1EB53A]/20">
-              <Stethoscope className="w-3.5 h-3.5 text-[#1EB53A]" />
-              <span>
-                {isSwahili
-                  ? 'Kuelewa Ripoti Yako ya Hospitali kwa Kiswahili na Kiingereza'
-                  : 'Understand Your Hospital Scan in Plain Swahili & English'}
-              </span>
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-              {isSwahili
-                ? 'Ufafanuzi Rahisi wa Ripoti za Eksirei & Ultrasound'
-                : 'Simple Radiology Report Interpretation for Patients'}
-            </h2>
-
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-xl mx-auto font-medium">
-              {isSwahili
-                ? 'Bandika maandishi ya ripoti, piga picha na simu, au pakia faili ya eksirei. AI inakufafanulia kwa maneno ya kawaida bila kutabiri ugonjwa (bila prognosis) na data yako haihifadhiwi.'
-                : 'Paste report text, take a camera photo, or upload an image. AI interprets technical terms into everyday language without giving a prognosis, with zero data storage.'}
-            </p>
-          </div>
-        )}
-
-        {/* Error Alert Display */}
-        {errorMessage && (
-          <div className="p-4 sm:p-5 rounded-3xl bg-rose-50 border-2 border-rose-200 text-rose-900 text-xs sm:text-sm flex items-start gap-3 shadow-xs">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-1">
-              <p className="font-bold">
-                {isSwahili ? 'Kuna hitilafu ilitokea:' : 'An error occurred:'}
-              </p>
-              <p className="leading-relaxed">{errorMessage}</p>
-            </div>
-            <button
-              onClick={() => setErrorMessage(null)}
-              className="text-rose-500 hover:text-rose-800 font-bold p-1 rounded-lg"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* View Switch: Input Section vs Interpretation Results */}
-        {interpretation ? (
-          <InterpretationDashboard
-            data={interpretation}
-            languageMode={languageMode}
-            onLanguageChange={setLanguageMode}
-            onReset={handleReset}
+        {/* OWNER INTERFACE VIEW */}
+        {userRole === 'owner' ? (
+          <OwnerInterface
+            settings={settings}
+            onUpdateSettings={setSettings}
+            onSaveSettings={handleSaveSettings}
+            onResetDefaults={handleResetDefaults}
+            onSwitchToUserMode={() => setUserRole('user')}
           />
         ) : (
-          <ReportInputSection
-            languageMode={languageMode}
-            isLoading={isLoading}
-            onInterpret={handleInterpret}
-          />
+          /* PATIENT / USER INTERFACE VIEW */
+          <>
+            {/* Tanzanian Patient Welcome & Quick Context */}
+            {!interpretation && (
+              <div className="text-center max-w-2xl mx-auto mb-2 animate-fadeIn">
+                <div
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border-2 transition"
+                  style={{
+                    backgroundColor: `${theme.primaryColor}18`,
+                    color: theme.primaryColor,
+                    borderColor: `${theme.primaryColor}35`,
+                  }}
+                >
+                  <Stethoscope className="w-3.5 h-3.5" style={{ color: theme.primaryColor }} />
+                  <span>{isSwahili ? text.heroBadge_sw : text.heroBadge_en}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Error Alert Display with Retry Option */}
+            {errorMessage && (
+              <div className={`p-4 sm:p-5 ${theme.borderRadius || 'rounded-3xl'} bg-rose-50 border-2 border-rose-200 text-rose-900 text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs`}>
+                <div className="flex items-start gap-3 flex-1">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">
+                      {isSwahili ? 'Kuna hitilafu ilitokea / Error Notification:' : 'An error occurred:'}
+                    </p>
+                    <p className="leading-relaxed text-rose-800">{errorMessage}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  {lastPayload && (
+                    <button
+                      onClick={() => handleInterpret(lastPayload)}
+                      disabled={isLoading}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-xs transition"
+                    >
+                      {isSwahili ? 'Jaribu Tena' : 'Retry Now'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setErrorMessage(null)}
+                    className="text-rose-500 hover:text-rose-800 font-bold p-1 rounded-lg"
+                    title="Funga"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* View Switch: Input Section vs Interpretation Results */}
+            {interpretation ? (
+              <InterpretationDashboard
+                data={interpretation}
+                languageMode={languageMode}
+                onLanguageChange={setLanguageMode}
+                onReset={handleReset}
+              />
+            ) : (
+              <ReportInputSection
+                languageMode={languageMode}
+                isLoading={isLoading}
+                onInterpret={handleInterpret}
+              />
+            )}
+
+            {/* Patient Rights & Information Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+              <div
+                className={`p-4 ${theme.borderRadius || 'rounded-2xl'} border-2 border-slate-200 flex items-start gap-3 shadow-xs transition`}
+                style={{ backgroundColor: theme.cardBackgroundColor || '#ffffff' }}
+              >
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{
+                    backgroundColor: `${theme.primaryColor}18`,
+                    color: theme.primaryColor,
+                  }}
+                >
+                  <ShieldCheck className="w-4 h-4" style={{ color: theme.primaryColor }} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">
+                    {text.card1Title_sw}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                    {text.card1Desc_sw}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={`p-4 ${theme.borderRadius || 'rounded-2xl'} border-2 border-slate-200 flex items-start gap-3 shadow-xs transition`}
+                style={{ backgroundColor: theme.cardBackgroundColor || '#ffffff' }}
+              >
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{
+                    backgroundColor: `${theme.secondaryColor}18`,
+                    color: theme.secondaryColor,
+                  }}
+                >
+                  <Info className="w-4 h-4" style={{ color: theme.secondaryColor }} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">
+                    {text.card2Title_sw}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                    {text.card2Desc_sw}
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={`p-4 ${theme.borderRadius || 'rounded-2xl'} border-2 border-slate-200 flex items-start gap-3 shadow-xs transition`}
+                style={{ backgroundColor: theme.cardBackgroundColor || '#ffffff' }}
+              >
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{
+                    backgroundColor: `${theme.accentColor}25`,
+                    color: '#b45309',
+                  }}
+                >
+                  <Heart className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">
+                    {text.card3Title_sw}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                    {text.card3Desc_sw}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </>
         )}
-
-        {/* Patient Rights & Information Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
-          <div className="p-4 rounded-2xl border-2 border-slate-200 bg-white flex items-start gap-3 shadow-xs">
-            <div className="w-8 h-8 rounded-xl bg-[#1EB53A]/10 text-[#1EB53A] flex items-center justify-center shrink-0 mt-0.5">
-              <ShieldCheck className="w-4 h-4 text-[#1EB53A]" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-900">
-                {isSwahili ? '100% Faragha (Zero Storage)' : '100% Private (No Storage)'}
-              </h4>
-              <p className="text-[11px] text-slate-500 mt-1 leading-normal">
-                {isSwahili
-                  ? 'Ripoti yako haihifadhiwi kwenye kanzidata yoyote. Inafutwa mara moja baada ya kufafanuliwa.'
-                  : 'Your scan is processed in-memory and immediately discarded. No records are kept.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl border-2 border-slate-200 bg-white flex items-start gap-3 shadow-xs">
-            <div className="w-8 h-8 rounded-xl bg-[#00A3DD]/10 text-[#00A3DD] flex items-center justify-center shrink-0 mt-0.5">
-              <Info className="w-4 h-4 text-[#00A3DD]" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-900">
-                {isSwahili ? 'Bila Prognosis (No Prognosis)' : 'No Prognosis Given'}
-              </h4>
-              <p className="text-[11px] text-slate-500 mt-1 leading-normal">
-                {isSwahili
-                  ? 'Haitoi utabiri wa kupona au muda wa ugonjwa. Inafafanua tu kile picha ilichoona.'
-                  : 'Does not predict disease outcome or life expectancy. Strictly explains observations.'}
-              </p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-2xl border-2 border-slate-200 bg-white flex items-start gap-3 shadow-xs">
-            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
-              <Heart className="w-4 h-4 text-amber-600" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-900">
-                {isSwahili ? 'Mwongozo kwa Daktari' : 'Doctor Consultation'}
-              </h4>
-              <p className="text-[11px] text-slate-500 mt-1 leading-normal">
-                {isSwahili
-                  ? 'Daima fika hospitali au kituo cha afya ili daktari akushauri na kukupatia matibabu kamili.'
-                  : 'Always visit your doctor or healthcare provider for clinical diagnosis and treatment.'}
-              </p>
-            </div>
-          </div>
-        </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t-2 border-slate-100 bg-white mt-12 py-6 text-slate-500 text-xs">
+      <footer
+        className="border-t-2 border-slate-100 mt-12 py-6 text-slate-500 text-xs transition"
+        style={{ backgroundColor: theme.cardBackgroundColor || '#ffffff' }}
+      >
         <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
           <div className="space-y-0.5">
             <p className="font-bold text-slate-800">
-              Tanzania Patient Radiology Interpreter • Kiswahili & English
+              {text.footerBrand}
             </p>
             <p className="text-[11px] text-slate-400">
-              Inazingatia faragha ya mgonjwa • Hakuna data inayohifadhiwa • Zero Data Retention
+              {text.footerNote}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
-            <span>Tanzania Colors</span>
+          <div className="flex items-center gap-3 text-[11px] text-slate-400 font-medium">
+            {userRole === 'user' && (
+              <button
+                type="button"
+                onClick={() => setUserRole('owner')}
+                className="hover:text-slate-900 text-[11px] underline flex items-center gap-1"
+              >
+                <Sliders className="w-3 h-3 text-emerald-500" />
+                <span>Owner Customizer</span>
+              </button>
+            )}
             <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#1EB53A]" title="Green" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#FCD116]" title="Yellow" />
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-900" title="Black" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#00A3DD]" title="Blue" />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.primaryColor }} title="Primary" />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.accentColor }} title="Accent" />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.darkColor }} title="Dark" />
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.secondaryColor }} title="Secondary" />
             </div>
           </div>
         </div>
@@ -206,3 +380,4 @@ export default function App() {
     </div>
   );
 }
+

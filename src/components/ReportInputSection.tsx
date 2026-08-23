@@ -121,24 +121,16 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
       {/* Top Banner with Vibrant Palette styling */}
       <div className="px-6 py-5 border-b-2 border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
-              {isSwahili ? 'Chagua Njia ya Kuingiza Ripoti' : 'Select Report Input Method'}
-            </h3>
-            <span className="bg-[#1EB53A] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Tanzania AI
-            </span>
-          </div>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-[15px] font-bold text-slate-700 mt-0.5">
             {isSwahili
-              ? 'Pakia picha ya ripoti yako au bandika maandishi ili upate maelezo ya haraka.'
-              : 'Upload a scan photo or paste text for an immediate, clear interpretation.'}
+              ? 'Bandika maandishi ya ripoti, piga picha na simu, au pakia picha ya report.'
+              : 'Paste report text, take a camera photo, or upload a report image.'}
           </p>
         </div>
 
         <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white border-2 border-slate-200 text-slate-700 text-xs px-3 py-1.5 rounded-xl font-bold">
           <ShieldCheck className="w-4 h-4 text-[#1EB53A]" />
-          <span>{isSwahili ? '100% Faragha (Zero Storage)' : '100% Private (No Storage)'}</span>
+          <span>{isSwahili ? '100% Faragha(Haihifadhiwi)' : '100% Private (Not Stored)'}</span>
         </div>
       </div>
 
@@ -164,10 +156,10 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
             </div>
             <div>
               <span className="font-bold text-sm text-slate-900 block">
-                {isSwahili ? 'Piga Picha ya Ripoti' : 'Take Photo with Camera'}
+                {isSwahili ? 'Piga Picha ya Karatasi ya Ripoti' : 'Photograph Report Paper'}
               </span>
               <span className="text-[11px] text-slate-500 mt-0.5 block">
-                {isSwahili ? 'Kutoka kwenye simu au kompyuta' : 'Using device camera'}
+                {isSwahili ? 'Picha ya waraka/karatasi ya daktari' : 'Photo of printed report sheet'}
               </span>
             </div>
           </div>
@@ -193,10 +185,10 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
             </div>
             <div>
               <span className="font-bold text-sm text-slate-900 block">
-                {isSwahili ? 'Pakia Faili (Image)' : 'Upload Image File'}
+                {isSwahili ? 'Pakia Picha ya Ripoti' : 'Upload Report Document'}
               </span>
               <span className="text-[11px] text-slate-500 block">
-                JPG, PNG, WEBP, HEIC
+                {isSwahili ? 'Picha ya karatasi ya matokeo' : 'JPG, PNG, WEBP, HEIC'}
               </span>
             </div>
           </div>
@@ -219,10 +211,10 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
             </div>
             <div>
               <span className="font-bold text-sm text-slate-900 block">
-                {isSwahili ? 'Bandika Maandishi' : 'Paste Report Text'}
+                {isSwahili ? 'Bandika Maandishi ya Ripoti' : 'Paste Report Text'}
               </span>
               <span className="text-[11px] text-slate-500 block">
-                {isSwahili ? 'Nakili maneno ya eksirei' : 'Paste raw notes / SMS'}
+                {isSwahili ? 'Nakili maneno ya ripoti ya daktari' : 'Paste written findings / notes'}
               </span>
             </div>
           </div>
@@ -312,8 +304,8 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
                   </h4>
                   <p className="text-xs text-slate-500 max-w-sm">
                     {isSwahili
-                      ? 'Piga picha safi ya karatasi ya ripoti au picha ya eksirei'
-                      : 'Take a clear photo of your paper report or film'}
+                      ? 'Piga picha safi ya karatasi ya ripoti ya hospitali (siyo filamu ya eksirei)'
+                      : 'Take a clear photo of your paper radiology report (not the raw scan film)'}
                   </p>
                 </div>
               )}
@@ -369,12 +361,12 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
                     <Upload className="w-6 h-6 stroke-[2.5]" />
                   </div>
                   <h4 className="text-sm font-bold text-slate-800">
-                    {isSwahili ? 'Pakia Picha ya Ripoti Hapa' : 'Upload Report Image Here'}
+                    {isSwahili ? 'Pakia Picha ya Karatasi ya Ripoti' : 'Upload Report Document Photo'}
                   </h4>
                   <p className="text-xs text-slate-500">
                     {isSwahili
-                      ? 'Inakubali JPG, PNG, WEBP, HEIC, TIFF'
-                      : 'Supports JPG, PNG, WEBP, HEIC, TIFF'}
+                      ? 'Picha ya waraka au ripoti ya maandishi (JPG, PNG, WEBP, HEIC)'
+                      : 'Photo of the written report document (JPG, PNG, WEBP, HEIC)'}
                   </p>
                   <span className="text-xs font-bold text-[#00A3DD] underline mt-1">
                     {isSwahili ? 'Chagua Faili' : 'Browse File'}
@@ -458,7 +450,7 @@ export const ReportInputSection: React.FC<ReportInputSectionProps> = ({
                 <>
                   <Sparkles className="w-4 h-4 text-[#FCD116]" />
                   <span>
-                    {isSwahili ? 'Tafsiri Ripoti Sasa' : 'Interpret Report Now'}
+                    {isSwahili ? 'Elezea Ripoti Sasa' : 'Explain Report Now'}
                   </span>
                 </>
               )}
