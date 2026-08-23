@@ -1,0 +1,6 @@
+{
+  "name": "Tanzania Radiology Report Interpreter",
+  "description": "Patient-friendly radiology report interpretation in simple English and Swahili (Kiswahili) with zero data storage, camera photo capture, and PDF export.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
