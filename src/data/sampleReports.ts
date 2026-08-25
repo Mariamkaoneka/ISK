@@ -41,47 +41,5 @@ FINDINGS:
 IMPRESSION:
 1. Cholelithiasis (small gallstones without sonographic signs of acute cholecystitis).
 2. Mild diffuse hepatic steatosis.`
-  },
-  {
-    id: 'mri-lumbar',
-    title_en: 'Lumbar Spine MRI Report - Back Pain',
-    title_sw: 'Ripoti ya MRI ya Mgongo wa Chini - Maumivu ya Kiuno',
-    category: 'MRI Report',
-    description_en: 'Sample written report document evaluating lumbar vertebrae and disc findings.',
-    description_sw: 'Mfano wa ripoti ya maandishi ya daktari inayoelezea matokeo ya MRI ya mgongo.',
-    text: `EXAMINATION: MRI OF LUMBAR SPINE (WITHOUT CONTRAST)
-CLINICAL HISTORY: 52-year-old with chronic lower back pain radiating down the posterior left thigh and calf.
-
-FINDINGS:
-- Alignment of lumbar spine is preserved with mild loss of physiological lumbar lordosis.
-- Vertebral body heights and marrow signals are preserved.
-- L1-L2, L2-L3, L3-L4: Normal intervertebral disc heights and signals. No significant disc bulge or canal stenosis.
-- L4-L5: Moderate disc desiccation with mild broad-based posterior disc bulge causing mild bilateral neural foraminal narrowing without substantial central canal stenosis.
-- L5-S1: Marked disc height loss and T2 disc signal reduction. Posterior left paracentral disc protrusion measuring approx 4.5 mm compressing the traversing left S1 nerve root.
-- Conus medullaris terminates normally at L1 level with normal signal intensity.
-
-IMPRESSION:
-1. L5-S1 left paracentral disc herniation with impingement on the left S1 nerve root.
-2. Mild degenerative disc disease at L4-L5.`
-  },
-  {
-    id: 'knee-xray',
-    title_en: 'Knee Radiograph Report - Joint Stiffness',
-    title_sw: 'Ripoti ya X-Ray ya Goti - Maumivu na Kukaza',
-    category: 'X-Ray Report',
-    description_en: 'Sample written report document evaluating joint space and cartilage.',
-    description_sw: 'Mfano wa ripoti ya maandishi ya daktari kuhusu uchakavu wa viungo.',
-    text: `EXAMINATION: RIGHT KNEE AP AND LATERAL RADIOGRAPHS (WEIGHT-BEARING)
-INDICATION: 61-year-old with progressive right knee pain on walking and morning stiffness.
-
-FINDINGS:
-- Mild to moderate asymmetric joint space narrowing in the medial femorotibial compartment.
-- Subchondral sclerosis and marginal osteophyte formation along the medial tibial plateau and medial femoral condyle.
-- Lateral compartment and patellofemoral joint spaces are relatively well preserved.
-- No evidence of acute fracture, dislocation, or joint effusion.
-- Surrounding periarticular soft tissues are intact.
-
-IMPRESSION:
-Moderate medial compartment osteoarthritis of the right knee. No acute osseous injury.`
   }
 ];

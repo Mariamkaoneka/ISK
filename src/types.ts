@@ -85,4 +85,31 @@ export interface AppTextConfig {
 export interface OwnerSettings {
   theme: AppThemeConfig;
   text: AppTextConfig;
+  customPromptInstruction?: string;
+  adminPin?: string;
+  sessionTimeoutMinutes?: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: number;
+  modality: string;
+  bodyRegion: string;
+  inputMethod: 'text' | 'file' | 'camera' | 'sample';
+  languageMode: LanguageMode;
+  status: 'success' | 'failed' | 'aborted';
+  durationMs: number;
+  wordCount: number;
+  modelUsed?: string;
+  errorMessage?: string;
+}
+
+export interface AdminStats {
+  totalInterpretations: number;
+  successCount: number;
+  failedCount: number;
+  averageDurationMs: number;
+  modalityCounts: Record<string, number>;
+  methodCounts: Record<string, number>;
+  languageCounts: Record<string, number>;
 }

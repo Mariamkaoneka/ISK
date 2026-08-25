@@ -234,7 +234,7 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* 1. TOP STATUS & METADATA BAR */}
-      <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -258,10 +258,10 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             id="btn-tts"
             type="button"
             onClick={handleToggleSpeech}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border-2 transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border-2 transition-all duration-200 cursor-pointer ${
               isSpeaking
                 ? 'bg-rose-100 text-rose-800 border-rose-300 animate-pulse'
-                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:-translate-y-0.5 shadow-xs'
             }`}
           >
             {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-[#1EB53A]" />}
@@ -273,21 +273,21 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             id="btn-quick-share"
             type="button"
             onClick={() => setShowShareModal(true)}
-            className="px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5 text-[#00A3DD]" />
             <span>{isSwahili ? 'Sambaza' : 'Share'}</span>
           </button>
 
-          {/* New Report */}
+          {/* Start over */}
           <button
             id="btn-interpret-another"
             type="button"
             onClick={onReset}
-            className="px-3.5 py-2 rounded-xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl border-2 border-amber-300 bg-amber-100/80 hover:bg-amber-200/80 text-amber-950 text-xs font-bold transition-all duration-200 hover:-translate-y-0.5 shadow-xs flex items-center gap-1.5 cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>{isSwahili ? 'Ripoti Mpya' : 'New Report'}</span>
+            <RotateCcw className="w-3.5 h-3.5 text-amber-900" />
+            <span>{isSwahili ? 'Anza Upya' : 'Start over'}</span>
           </button>
         </div>
       </div>
@@ -437,7 +437,7 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
                 <span className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-[10px] font-black shrink-0">
                   4
                 </span>
-                <span>{isSwahili ? 'Maswali ya Kumuuliza Daktari Wako' : 'Questions to Ask Your Doctor'}</span>
+                <span>{isSwahili ? 'Maswali ya Kumuuliza Daktari Wako' : 'Questions You May Ask Your Doctor'}</span>
               </h3>
 
               <ul className="space-y-2.5">
@@ -478,12 +478,12 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
         </div>
 
         {/* Action Buttons in Vibrant Palette Style */}
-        <div className="p-6 bg-slate-50 border-t-2 border-slate-100 flex flex-col sm:flex-row gap-4">
+        <div className="p-6 bg-slate-50 border-t-2 border-slate-100 flex flex-col sm:flex-row gap-3 sm:gap-4">
           <button
             id="btn-download-pdf"
             type="button"
             onClick={handleDownloadPDF}
-            className="flex-1 py-3.5 bg-black hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition active:scale-98"
+            className="flex-1 py-3.5 bg-slate-950 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
           >
             <Download className="w-4 h-4 stroke-[2.5]" />
             <span>{isSwahili ? 'Pakua PDF' : 'Download PDF'}</span>
@@ -493,10 +493,21 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             id="btn-share"
             type="button"
             onClick={() => setShowShareModal(true)}
-            className="flex-1 py-3.5 border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition active:scale-98"
+            className="flex-1 py-3.5 border-2 border-slate-200 bg-white hover:bg-slate-100 text-slate-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
           >
             <Share2 className="w-4 h-4 text-[#00A3DD]" />
             <span>{isSwahili ? 'Sambaza / Shiriki' : 'Share Options'}</span>
+          </button>
+
+          <button
+            id="btn-start-over"
+            type="button"
+            onClick={onReset}
+            className="flex-1 py-3.5 border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
+            title={isSwahili ? 'Anza upya kufafanua ripoti nyingine' : 'Start over and interpret another report'}
+          >
+            <RotateCcw className="w-4 h-4 text-amber-800" />
+            <span>{isSwahili ? 'Anza Upya' : 'Start Over'}</span>
           </button>
         </div>
       </div>

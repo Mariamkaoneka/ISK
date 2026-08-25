@@ -17,11 +17,11 @@ export const DEFAULT_OWNER_SETTINGS: OwnerSettings = {
     bgPattern: 'none',
   },
   text: {
-    brandName: 'AfyaRadiology',
-    brandAccent: 'Tanzania',
+    brandName: 'Tafsiri',
+    brandAccent: 'Radiolojia',
     brandTagline_sw: '',
     brandTagline_en: '',
-    heroBadge_sw: 'Kuelewa Maandishi ya Ripoti Yako ya Hospitali kwa Kiswahili na Kiingereza',
+    heroBadge_sw: 'Elewa Ripoti Yako ya Radiolojia kwa Kiswahili na Kingereza',
     heroBadge_en: 'Understand Your Written Radiology Report in Swahili and English',
     heroHeading_sw: '',
     heroHeading_en: '',
@@ -38,7 +38,7 @@ export const DEFAULT_OWNER_SETTINGS: OwnerSettings = {
     card3Title_sw: 'Mwongozo kwa Daktari',
     card3Desc_sw:
       'Daima fika hospitali au kituo cha afya ili daktari akushauri na kukupatia matibabu kamili.',
-    footerBrand: 'Tanzania Patient Radiology Interpreter • Kiswahili & English',
+    footerBrand: 'Tafsiri Radiolojia • Kiswahili & English',
     footerNote: 'Inazingatia faragha ya mgonjwa • Hakuna data inayohifadhiwa • Zero Data Retention',
   },
 };
