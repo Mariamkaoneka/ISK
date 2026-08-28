@@ -149,20 +149,6 @@ export async function fetchRatingsFromFirestore(max = 50): Promise<Interpretatio
   }
 }
 
-// ----------------- APP HIT TELEMETRY -----------------
-export async function recordAppHitToFirestore(hit: Omit<AppHitLog, 'id'>): Promise<void> {
-  try {
-    if (!db) return;
-    const hitsCol = collection(db, 'appHits');
-    await addDoc(hitsCol, {
-      ...hit,
-      createdAt: serverTimestamp(),
-    });
-  } catch (error) {
-    // Non-blocking telemetry
-  }
-}
-
 // ----------------- SAVED PATIENT INTERPRETATIONS -----------------
 export interface SavedInterpretationRecord {
   id?: string;

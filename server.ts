@@ -3,8 +3,28 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import { initializeApp, getApps, getApp } from "firebase-admin/app";
+import { getFirestore as getAdminFirestore, FieldValue } from "firebase-admin/firestore";
+import firebaseConfig from "./firebase-applet-config.json";
 
 dotenv.config();
+
+// Initialize Firebase Admin SDK
+if (!getApps().length) {
+  try {
+    initializeApp({
+      projectId: firebaseConfig.projectId,
+    });
+  } catch (err) {
+    console.warn("Firebase Admin initializeApp warning:", err);
+  }
+}
+
+const adminDb = getApps().length
+  ? (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+      ? getAdminFirestore(getApp(), firebaseConfig.firestoreDatabaseId)
+      : getAdminFirestore(getApp()))
+  : null;
 
 const app = express();
 const PORT = 3000;
@@ -140,6 +160,29 @@ function recordHit(
 // Health check endpoint (does not create artificial user hits)
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", service: "Tanzania Radiology Interpreter API", totalHits: appHitData.totalHits });
+});
+
+// Endpoint: Securely record app hit in Firestore (analytics/app_metrics) via Firebase Admin SDK
+app.post("/api/record-hit", async (req: Request, res: Response) => {
+  try {
+    if (adminDb) {
+      const metricsRef = adminDb.collection("analytics").doc("app_metrics");
+      await metricsRef.set(
+        {
+          totalHits: FieldValue.increment(1),
+          lastHitAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    recordHit('page_view', 'Patient Portal Loaded', req.body?.path || '/', req);
+
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error("Error recording app hit in Firestore:", error);
+    return res.status(500).json({ success: false, error: error?.message || "Failed to record hit" });
+  }
 });
 
 // Explicit client telemetry endpoint for logging front-end app hits

@@ -16,7 +16,6 @@ import {
   loadSettingsFromFirestore,
   logAuditToFirestore,
   fetchAuditLogsFromFirestore,
-  recordAppHitToFirestore,
   saveInterpretationToHistory,
   isFirebaseConfigured,
 } from './lib/firebase';
@@ -90,34 +89,31 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category, description, path: window.location.pathname, deviceType }),
       }).catch(() => {});
-
-      if (isFirebaseConfigured) {
-        recordAppHitToFirestore({
-          timestamp: Date.now(),
-          category: category as any,
-          description,
-          path: window.location.pathname,
-          deviceType,
-          status: 'success',
-        }).catch(() => {});
-      }
     } catch (e) {
       // Ignore telemetry errors
     }
   };
 
-  // Initialize Firebase Auth, sync settings & initial telemetry (strictly once per session)
+  // Securely record initial app hit on initial load via server-side endpoint
   useEffect(() => {
-    try {
-      const alreadyTracked = sessionStorage.getItem('tafsiri_session_pv_logged');
-      if (!alreadyTracked) {
-        sessionStorage.setItem('tafsiri_session_pv_logged', 'true');
-        trackHit('page_view', 'Patient Portal Loaded');
+    const recordAppHit = async () => {
+      try {
+        await fetch('/api/record-hit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: window.location.pathname }),
+        });
+      } catch (err) {
+        // Gracefully catch errors so user experience is not disrupted
+        console.warn('App hit tracking notice:', err);
       }
-    } catch {
-      // Ignore storage errors
-    }
+    };
 
+    recordAppHit();
+  }, []);
+
+  // Initialize Firebase Auth & sync settings from Firestore
+  useEffect(() => {
     if (isFirebaseConfigured) {
       ensureAuth().catch((err) => console.warn('Auth init:', err));
 
