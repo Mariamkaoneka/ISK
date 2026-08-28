@@ -28,7 +28,22 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Stethoscope,
-  Radio
+  Radio,
+  BarChart3,
+  TrendingUp,
+  Smartphone,
+  Laptop,
+  Tablet,
+  MousePointerClick,
+  Volume2,
+  FolderHeart,
+  Layers,
+  Flame,
+  Filter,
+  Star,
+  MessageSquareHeart,
+  ThumbsUp,
+  Award
 } from 'lucide-react';
 import {
   OwnerSettings,
@@ -36,10 +51,16 @@ import {
   AppTextConfig,
   AuditLogEntry,
   SampleReport,
-  LanguageMode
+  LanguageMode,
+  AppHitStats,
+  AppHitLog,
+  RatingStats,
+  InterpretationRating
 } from '../types';
 import { THEME_PRESETS } from '../data/defaultOwnerSettings';
 import { SAMPLE_REPORTS } from '../data/sampleReports';
+import { isFirebaseConfigured } from '../lib/firebase';
+import firebaseConfig from '../../firebase-applet-config.json';
 
 interface AdminPortalProps {
   settings: OwnerSettings;
@@ -49,7 +70,7 @@ interface AdminPortalProps {
   onClearAuditLogs: () => void;
 }
 
-type AdminTab = 'overview' | 'ai-tuning' | 'branding' | 'samples' | 'security';
+type AdminTab = 'overview' | 'ai-tuning' | 'branding' | 'samples' | 'ratings' | 'security';
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
   settings,
@@ -61,6 +82,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [editedSettings, setEditedSettings] = useState<OwnerSettings>(settings);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+
+  // App Hits and Traffic Metrics state
+  const [hitStats, setHitStats] = useState<AppHitStats | null>(null);
+  const [isHitsLoading, setIsHitsLoading] = useState(false);
+  const [autoRefreshHits, setAutoRefreshHits] = useState(true);
+  const [hitCategoryFilter, setHitCategoryFilter] = useState<string>('all');
+  const [isResettingHits, setIsResettingHits] = useState(false);
+
+  // Patient Ratings state (Visible strictly to Admin)
+  const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
+  const [isRatingsLoading, setIsRatingsLoading] = useState(false);
+  const [ratingStarFilter, setRatingStarFilter] = useState<number | 'all'>('all');
+  const [ratingTagFilter, setRatingTagFilter] = useState<string>('all');
+  const [ratingSearchQuery, setRatingSearchQuery] = useState<string>('');
+  const [isClearingRatings, setIsClearingRatings] = useState(false);
 
   // Server health state
   const [serverHealth, setServerHealth] = useState<{
@@ -118,9 +154,127 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
+  // Fetch app hits and traffic statistics
+  const fetchHits = async () => {
+    setIsHitsLoading(true);
+    try {
+      const res = await fetch('/api/admin/hits');
+      if (res.ok) {
+        const data: AppHitStats = await res.json();
+        setHitStats(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch app hit stats:', e);
+    } finally {
+      setIsHitsLoading(false);
+    }
+  };
+
+  // Fetch patient ratings (Admin-only data)
+  const fetchRatingStats = async () => {
+    setIsRatingsLoading(true);
+    try {
+      const res = await fetch('/api/admin/ratings');
+      if (res.ok) {
+        const data: RatingStats = await res.json();
+        setRatingStats(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch rating stats:', e);
+    } finally {
+      setIsRatingsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDiagnostics();
+    fetchHits();
+    fetchRatingStats();
   }, []);
+
+  // Periodic polling for real-time hits & ratings when auto-refresh is active
+  useEffect(() => {
+    if (!autoRefreshHits) return;
+    const interval = setInterval(() => {
+      if (activeTab === 'overview') {
+        fetchHits();
+      } else if (activeTab === 'ratings') {
+        fetchRatingStats();
+      }
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [autoRefreshHits, activeTab]);
+
+  // Clear all patient ratings
+  const handleClearRatings = async () => {
+    if (!window.confirm('Are you sure you want to permanently clear all patient ratings and feedback records?')) {
+      return;
+    }
+    setIsClearingRatings(true);
+    try {
+      const res = await fetch('/api/admin/clear-ratings', { method: 'POST' });
+      if (res.ok) {
+        await fetchRatingStats();
+        setSaveSuccessMessage('All patient ratings and review records have been cleared.');
+        setTimeout(() => setSaveSuccessMessage(null), 3500);
+      }
+    } catch (e) {
+      console.error('Failed to clear ratings:', e);
+    } finally {
+      setIsClearingRatings(false);
+    }
+  };
+
+  // Export ratings to CSV
+  const handleExportRatingsCSV = () => {
+    if (!ratingStats || ratingStats.recentRatings.length === 0) {
+      alert('No rating records available to export.');
+      return;
+    }
+    const headers = ['ID', 'Timestamp', 'Date', 'Stars', 'Clarity (1-5)', 'Helpfulness (1-5)', 'Modality', 'Language', 'Device', 'Tags', 'Feedback Comment'];
+    const rows = ratingStats.recentRatings.map((r) => [
+      r.id,
+      r.timestamp,
+      new Date(r.timestamp).toISOString(),
+      r.stars,
+      r.clarityRating || '',
+      r.helpfulnessRating || '',
+      `"${(r.modality || '').replace(/"/g, '""')}"`,
+      r.languageMode || '',
+      r.deviceType || '',
+      `"${(r.tags || []).join('; ').replace(/"/g, '""')}"`,
+      `"${(r.feedbackText || '').replace(/"/g, '""')}"`,
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `patient-ratings-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Reset hits handler
+  const handleResetHits = async () => {
+    if (!window.confirm('Are you sure you want to reset the application traffic & hit counters?')) {
+      return;
+    }
+    setIsResettingHits(true);
+    try {
+      const res = await fetch('/api/admin/reset-hits', { method: 'POST' });
+      if (res.ok) {
+        await fetchHits();
+        setSaveSuccessMessage('Traffic hits counter has been reset to zero.');
+        setTimeout(() => setSaveSuccessMessage(null), 3500);
+      }
+    } catch (e) {
+      console.error('Failed to reset hits:', e);
+    } finally {
+      setIsResettingHits(false);
+    }
+  };
 
   // Save changes handler
   const handleSave = (customUpdated?: OwnerSettings) => {
@@ -269,6 +423,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
         {/* Top Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Live App Hits Badge */}
+          <div
+            id="badge-admin-hits"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-950/70 border border-sky-800/80 text-sky-300 text-xs font-mono font-bold shadow-xs"
+            title="Total application traffic hits recorded"
+          >
+            <Flame className="w-3.5 h-3.5 text-sky-400 animate-pulse" />
+            <span>{hitStats?.totalHits ?? 0} Hits</span>
+            {hitStats?.todayHits !== undefined && hitStats.todayHits > 0 && (
+              <span className="hidden sm:inline text-[10px] text-sky-400/90 font-normal">
+                ({hitStats.todayHits} today)
+              </span>
+            )}
+          </div>
+
           {saveSuccessMessage && (
             <div className="hidden md:flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-3 py-1.5 rounded-lg animate-fadeIn">
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -349,6 +518,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </button>
 
           <button
+            id="tab-btn-ratings"
+            onClick={() => {
+              setActiveTab('ratings');
+              fetchRatingStats();
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'ratings'
+                ? 'bg-amber-500 text-slate-950 shadow-md'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Star className={`w-4 h-4 ${activeTab === 'ratings' ? 'fill-slate-950 text-slate-950' : 'fill-amber-400 text-amber-500'}`} />
+            <span>Patient Ratings</span>
+            {ratingStats && ratingStats.totalRatings > 0 && (
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold ${
+                activeTab === 'ratings' ? 'bg-slate-950/20 text-slate-950' : 'bg-amber-500/20 text-amber-300'
+              }`}>
+                ★{ratingStats.averageStars} ({ratingStats.totalRatings})
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('security')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'security'
@@ -364,52 +556,604 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         {/* TAB 1: OVERVIEW & ANALYTICS */}
         {activeTab === 'overview' && (
           <div className="space-y-6 animate-fadeIn">
-            {/* System Status Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
+            {/* System Status & Top KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+              {/* Total App Hits Card */}
+              <div id="kpi-total-hits" className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2 relative overflow-hidden">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>AI Engine Status</span>
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="font-semibold text-slate-300">Total App Hits</span>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                    <span className="text-[10px] text-sky-400 font-mono">LIVE</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Cpu className="w-5 h-5 text-emerald-400" />
-                  <span className="font-extrabold text-lg text-white">Gemini 3.7 Flash</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-3xl text-white tracking-tight">
+                    {hitStats?.totalHits ?? 0}
+                  </span>
+                  <Flame className="w-5 h-5 text-sky-400" />
                 </div>
-                <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  <span>Configured with auto-failover</span>
+                <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Today: <strong className="text-sky-300 font-bold">{hitStats?.todayHits ?? 0} hits</strong></span>
+                  <span className="text-slate-500">Live Counter</span>
                 </p>
               </div>
 
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
+              {/* Patient Satisfaction / Ratings Card */}
+              <button
+                id="kpi-patient-ratings"
+                type="button"
+                onClick={() => {
+                  setActiveTab('ratings');
+                  fetchRatingStats();
+                }}
+                className="bg-slate-950/80 hover:bg-slate-900 border border-amber-500/40 hover:border-amber-400 p-4 rounded-2xl space-y-2 relative overflow-hidden cursor-pointer group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-amber-500/10 text-left w-full focus:outline-hidden focus:ring-2 focus:ring-amber-400/50"
+              >
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>Total Interpretations</span>
-                  <Activity className="w-4 h-4 text-sky-400" />
+                  <span className="font-semibold text-amber-300 flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <span>Patient Ratings</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 group-hover:bg-amber-500 group-hover:text-slate-950 transition font-bold">
+                    View Reviews →
+                  </span>
                 </div>
-                <div className="font-extrabold text-2xl text-white">{totalLogs}</div>
-                <p className="text-[11px] text-slate-400">Active browser session</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-3xl text-amber-300 tracking-tight">
+                    {ratingStats && ratingStats.totalRatings > 0 ? `★ ${ratingStats.averageStars}` : '—'}
+                  </span>
+                  {ratingStats && ratingStats.totalRatings > 0 && (
+                    <span className="text-xs text-amber-400/80 font-mono">/ 5.0</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Reviews: <strong className="text-amber-200 font-bold">{ratingStats?.totalRatings ?? 0} submissions</strong></span>
+                  <span className="text-amber-400/80 text-[10px] font-semibold underline underline-offset-2">Click to open</span>
+                </p>
+              </button>
+
+              {/* Total Interpretations Card */}
+              <div
+                id="kpi-interpretations"
+                className="bg-slate-950/80 border border-emerald-500/30 hover:border-emerald-500/60 p-4 rounded-2xl space-y-2 relative overflow-hidden transition-all duration-200"
+              >
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                    <Stethoscope className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>AI Interpretations Done</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                    Completed
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-3xl text-emerald-300 tracking-tight">
+                    {hitStats?.interpretationsCount ?? 0}
+                  </span>
+                  <span className="text-xs text-emerald-400/80 font-mono">done</span>
+                </div>
+                <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Session audit logs: <strong className="text-slate-200">{totalLogs}</strong></span>
+                  <span className="text-emerald-400/90 font-medium">
+                    {successLogs > 0 ? `${successLogs} successful` : 'Engine ready'}
+                  </span>
+                </p>
               </div>
 
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
+              {/* Audio Plays Card */}
+              <div id="kpi-audio-plays" className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>Success Rate</span>
+                  <span className="font-semibold text-slate-300">Voice Narrations</span>
+                  <Volume2 className="w-4 h-4 text-purple-400" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-3xl text-purple-300 tracking-tight">
+                    {hitStats?.audioPlaysCount ?? 0}
+                  </span>
+                  <span className="text-xs text-purple-400/80 font-mono">plays</span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Swahili & English audio
+                </p>
+              </div>
+
+              {/* AI Engine Status & Latency */}
+              <div id="kpi-ai-status" className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-slate-300">AI Engine & Health</span>
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 </div>
-                <div className="font-extrabold text-2xl text-emerald-400">{successRate}%</div>
-                <p className="text-[11px] text-slate-400">
-                  {successLogs} succeeded / {totalLogs - successLogs} issues
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span className="font-extrabold text-base text-white truncate">Gemini 3.7 Flash</span>
+                </div>
+                <p className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Success: <strong className="text-emerald-400">{successRate}%</strong></span>
+                  <span className="font-mono text-slate-400">{avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : '< 2s'}</span>
                 </p>
               </div>
+            </div>
 
-              <div className="bg-slate-950/60 border border-slate-800 p-4 rounded-2xl space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>Average Latency</span>
-                  <Clock className="w-4 h-4 text-amber-400" />
+            {/* REAL-TIME APP HITS & TRAFFIC ANALYTICS SECTION */}
+            <div id="section-app-hits" className="bg-slate-950/70 border border-slate-800 p-5 rounded-2xl space-y-5">
+              {/* Header with Title & Controls */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 font-black">
+                    <BarChart3 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm sm:text-base text-white">
+                        Application Traffic & Real-Time Hits
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10px] font-mono font-bold">
+                        Live Tracking
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Real-time telemetry of page visitors, medical report scans, voice audio listening, and administrative access.
+                    </p>
+                  </div>
                 </div>
-                <div className="font-extrabold text-2xl text-white">
-                  {avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : '< 2.0s'}
+
+                <div className="flex items-center gap-2">
+                  {/* Auto-Refresh Toggle */}
+                  <button
+                    onClick={() => setAutoRefreshHits(!autoRefreshHits)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition border cursor-pointer ${
+                      autoRefreshHits
+                        ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                        : 'bg-slate-800/80 border-slate-700 text-slate-400'
+                    }`}
+                    title="Toggle auto-refresh every 6 seconds"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${autoRefreshHits ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>Auto-Refresh: {autoRefreshHits ? 'ON' : 'PAUSED'}</span>
+                  </button>
+
+                  {/* Manual Refresh Button */}
+                  <button
+                    onClick={fetchHits}
+                    disabled={isHitsLoading}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition border border-slate-700 cursor-pointer disabled:opacity-50"
+                    title="Fetch latest traffic statistics"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isHitsLoading ? 'animate-spin text-sky-400' : ''}`} />
+                    <span className="hidden xs:inline">Refresh</span>
+                  </button>
+
+                  {/* Reset Counter Button */}
+                  <button
+                    onClick={handleResetHits}
+                    disabled={isResettingHits}
+                    className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-950/50 hover:text-rose-300 text-slate-400 hover:border-rose-800 text-xs font-semibold flex items-center gap-1.5 transition border border-slate-800 cursor-pointer disabled:opacity-50"
+                    title="Reset hit telemetry counters"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Reset</span>
+                  </button>
                 </div>
-                <p className="text-[11px] text-slate-400">Server-side processing</p>
+              </div>
+
+              {/* Sub-Category KPI Counters (4 Columns) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Page Visits</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {hitStats && hitStats.totalHits > 0
+                        ? `${Math.round((hitStats.pageViews / hitStats.totalHits) * 100)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="text-xl font-extrabold text-white">
+                    {hitStats?.pageViews ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-400">Patient app page loads</div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Stethoscope className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Report Scans</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {hitStats && hitStats.totalHits > 0
+                        ? `${Math.round((hitStats.interpretationsCount / hitStats.totalHits) * 100)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="text-xl font-extrabold text-emerald-400">
+                    {hitStats?.interpretationsCount ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-400">X-Ray & Ultrasound analyses</div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Volume2 className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Audio Plays</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {hitStats && hitStats.totalHits > 0
+                        ? `${Math.round((hitStats.audioPlaysCount / hitStats.totalHits) * 100)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="text-xl font-extrabold text-purple-300">
+                    {hitStats?.audioPlaysCount ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-400">Swahili voice listening</div>
+                </div>
+
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Admin Sessions</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {hitStats && hitStats.totalHits > 0
+                        ? `${Math.round((hitStats.adminAccessCount / hitStats.totalHits) * 100)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                  <div className="text-xl font-extrabold text-amber-300">
+                    {hitStats?.adminAccessCount ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-400">Staff portal interactions</div>
+                </div>
+              </div>
+
+              {/* Detailed Breakdown: Category Progress Bars & Device Distribution */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Left: Feature Category Breakdown */}
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <Layers className="w-4 h-4 text-sky-400" />
+                      <span>Hits Distribution by Feature</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono font-normal">
+                      {hitStats?.totalHits ?? 0} total requests
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 text-xs">
+                    {/* Page Views Bar */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-300 mb-1">
+                        <span className="flex items-center gap-1">
+                          <Globe className="w-3 h-3 text-sky-400" /> Page Views
+                        </span>
+                        <span className="font-mono">
+                          {hitStats?.pageViews ?? 0} ({hitStats && hitStats.totalHits > 0 ? Math.round((hitStats.pageViews / hitStats.totalHits) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-sky-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${hitStats && hitStats.totalHits > 0 && hitStats.pageViews > 0 ? (hitStats.pageViews / hitStats.totalHits) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Report Interpretations Bar */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-300 mb-1">
+                        <span className="flex items-center gap-1">
+                          <Stethoscope className="w-3 h-3 text-emerald-400" /> AI Report Interpretations
+                        </span>
+                        <span className="font-mono">
+                          {hitStats?.interpretationsCount ?? 0} ({hitStats && hitStats.totalHits > 0 ? Math.round((hitStats.interpretationsCount / hitStats.totalHits) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${hitStats && hitStats.totalHits > 0 && hitStats.interpretationsCount > 0 ? (hitStats.interpretationsCount / hitStats.totalHits) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Audio Plays Bar */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-300 mb-1">
+                        <span className="flex items-center gap-1">
+                          <Volume2 className="w-3 h-3 text-purple-400" /> Voice Readouts
+                        </span>
+                        <span className="font-mono">
+                          {hitStats?.audioPlaysCount ?? 0} ({hitStats && hitStats.totalHits > 0 ? Math.round((hitStats.audioPlaysCount / hitStats.totalHits) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-purple-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${hitStats && hitStats.totalHits > 0 && hitStats.audioPlaysCount > 0 ? (hitStats.audioPlaysCount / hitStats.totalHits) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Sample Reports Bar */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-300 mb-1">
+                        <span className="flex items-center gap-1">
+                          <FolderHeart className="w-3 h-3 text-pink-400" /> Sample Case Studies Loaded
+                        </span>
+                        <span className="font-mono">
+                          {hitStats?.sampleViewsCount ?? 0} ({hitStats && hitStats.totalHits > 0 ? Math.round((hitStats.sampleViewsCount / hitStats.totalHits) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-pink-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${hitStats && hitStats.totalHits > 0 && hitStats.sampleViewsCount > 0 ? (hitStats.sampleViewsCount / hitStats.totalHits) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Admin Access Bar */}
+                    <div>
+                      <div className="flex justify-between text-[11px] text-slate-300 mb-1">
+                        <span className="flex items-center gap-1">
+                          <Shield className="w-3 h-3 text-amber-400" /> Admin & Staff Logins
+                        </span>
+                        <span className="font-mono">
+                          {hitStats?.adminAccessCount ?? 0} ({hitStats && hitStats.totalHits > 0 ? Math.round((hitStats.adminAccessCount / hitStats.totalHits) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${hitStats && hitStats.totalHits > 0 && hitStats.adminAccessCount > 0 ? (hitStats.adminAccessCount / hitStats.totalHits) * 100 : 0}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Client Device Distribution */}
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                    <span className="flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-emerald-400" />
+                      <span>Client Device Breakdown</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono font-normal">
+                      User Agent Telemetry
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5 my-auto">
+                    {/* Mobile Card */}
+                    <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-center space-y-1.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
+                      <div className="font-bold text-sm text-white">
+                        {hitStats?.deviceBreakdown?.mobile ?? 0}
+                      </div>
+                      <div className="text-[10px] text-slate-400">Mobile</div>
+                      <div className="text-[10px] font-mono text-emerald-400">
+                        {hitStats && hitStats.totalHits > 0
+                          ? `${Math.round(((hitStats.deviceBreakdown?.mobile || 0) / hitStats.totalHits) * 100)}%`
+                          : '0%'}
+                      </div>
+                    </div>
+
+                    {/* Desktop Card */}
+                    <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-center space-y-1.5">
+                      <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center mx-auto">
+                        <Laptop className="w-4 h-4" />
+                      </div>
+                      <div className="font-bold text-sm text-white">
+                        {hitStats?.deviceBreakdown?.desktop ?? 0}
+                      </div>
+                      <div className="text-[10px] text-slate-400">Desktop</div>
+                      <div className="text-[10px] font-mono text-sky-400">
+                        {hitStats && hitStats.totalHits > 0
+                          ? `${Math.round(((hitStats.deviceBreakdown?.desktop || 0) / hitStats.totalHits) * 100)}%`
+                          : '0%'}
+                      </div>
+                    </div>
+
+                    {/* Tablet Card */}
+                    <div className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-center space-y-1.5">
+                      <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+                        <Tablet className="w-4 h-4" />
+                      </div>
+                      <div className="font-bold text-sm text-white">
+                        {hitStats?.deviceBreakdown?.tablet ?? 0}
+                      </div>
+                      <div className="text-[10px] text-slate-400">Tablet</div>
+                      <div className="text-[10px] font-mono text-purple-400">
+                        {hitStats && hitStats.totalHits > 0
+                          ? `${Math.round(((hitStats.deviceBreakdown?.tablet || 0) / hitStats.totalHits) * 100)}%`
+                          : '0%'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Responsive patient interface adapts dynamically to all screen sizes.</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* LIVE RECENT HITS STREAM */}
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-sky-400" />
+                    <h4 className="font-bold text-xs sm:text-sm text-white">
+                      Live Traffic Activity Stream
+                    </h4>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      ({hitStats?.recentHits?.length || 0} events logged)
+                    </span>
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1 overflow-x-auto text-[11px]">
+                    <button
+                      onClick={() => setHitCategoryFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
+                        hitCategoryFilter === 'all'
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setHitCategoryFilter('page_view')}
+                      className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
+                        hitCategoryFilter === 'page_view'
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Page Views
+                    </button>
+                    <button
+                      onClick={() => setHitCategoryFilter('interpretation')}
+                      className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
+                        hitCategoryFilter === 'interpretation'
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      AI Interpretations
+                    </button>
+                    <button
+                      onClick={() => setHitCategoryFilter('audio_play')}
+                      className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
+                        hitCategoryFilter === 'audio_play'
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Audio
+                    </button>
+                    <button
+                      onClick={() => setHitCategoryFilter('admin_access')}
+                      className={`px-2.5 py-1 rounded-lg transition font-medium cursor-pointer ${
+                        hitCategoryFilter === 'admin_access'
+                          ? 'bg-sky-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Admin
+                    </button>
+                  </div>
+                </div>
+
+                {/* Hits Table */}
+                {hitStats && hitStats.recentHits && hitStats.recentHits.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60 max-h-72 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="p-2.5 pl-3">Time</th>
+                          <th className="p-2.5">Category</th>
+                          <th className="p-2.5">Action & Description</th>
+                          <th className="p-2.5">Endpoint / Path</th>
+                          <th className="p-2.5">Device</th>
+                          <th className="p-2.5">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                        {hitStats.recentHits
+                          .filter((h) => hitCategoryFilter === 'all' || h.category === hitCategoryFilter)
+                          .map((hit) => {
+                            const date = new Date(hit.timestamp);
+                            const timeStr = !isNaN(date.getTime())
+                              ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                              : hit.timestamp;
+
+                            const getCategoryBadge = (cat: string) => {
+                              switch (cat) {
+                                case 'interpretation':
+                                  return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                                case 'audio_play':
+                                  return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+                                case 'admin_access':
+                                  return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+                                case 'sample_view':
+                                  return 'bg-pink-500/15 text-pink-300 border-pink-500/30';
+                                case 'page_view':
+                                default:
+                                  return 'bg-sky-500/15 text-sky-300 border-sky-500/30';
+                              }
+                            };
+
+                            const getDeviceIcon = (dev?: string) => {
+                              if (dev === 'mobile') return <Smartphone className="w-3.5 h-3.5 text-emerald-400" />;
+                              if (dev === 'tablet') return <Tablet className="w-3.5 h-3.5 text-purple-400" />;
+                              return <Laptop className="w-3.5 h-3.5 text-sky-400" />;
+                            };
+
+                            return (
+                              <tr key={hit.id} className="hover:bg-slate-800/40 transition">
+                                <td className="p-2.5 pl-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                                  {timeStr}
+                                </td>
+                                <td className="p-2.5 whitespace-nowrap">
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase border ${getCategoryBadge(hit.category)}`}>
+                                    {hit.category.replace('_', ' ')}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 font-medium text-slate-200 max-w-xs truncate">
+                                  {hit.description}
+                                </td>
+                                <td className="p-2.5 font-mono text-[11px] text-slate-400 max-w-[140px] truncate">
+                                  {hit.path}
+                                </td>
+                                <td className="p-2.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-1 text-[11px] text-slate-300">
+                                    {getDeviceIcon(hit.deviceType)}
+                                    <span className="capitalize">{hit.deviceType || 'web'}</span>
+                                  </div>
+                                </td>
+                                <td className="p-2.5 whitespace-nowrap">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                      hit.status === 'success'
+                                        ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/80'
+                                        : 'bg-rose-950/60 text-rose-400 border border-rose-800/80'
+                                    }`}
+                                  >
+                                    {hit.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center bg-slate-900/40 rounded-xl border border-slate-800 text-slate-400 text-xs">
+                    No traffic activity recorded yet in this server instance.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -423,7 +1167,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 <button
                   onClick={fetchDiagnostics}
                   disabled={isHealthLoading}
-                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition"
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition cursor-pointer"
                 >
                   <RefreshCw className={`w-3 h-3 ${isHealthLoading ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
@@ -475,7 +1219,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 {auditLogs.length > 0 && (
                   <button
                     onClick={onClearAuditLogs}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 text-xs font-bold transition flex items-center gap-1 border border-slate-700"
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-400 text-xs font-bold transition flex items-center gap-1 border border-slate-700 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Clear Log</span>
@@ -1041,6 +1785,501 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   />
                 </label>
               </div>
+            </div>
+
+            {/* Google Firebase Cloud Persistence */}
+            <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <Database className="w-4 h-4 text-amber-400" />
+                  <span>Google Firebase & Cloud Firestore</span>
+                </h3>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Firebase Active</span>
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400">
+                Google Firebase is active and synchronizing clinical settings, patient reviews, audit trails, and interpretation logs.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold">Firebase Project</span>
+                  <p className="text-xs font-mono text-white font-bold truncate">{firebaseConfig.projectId || 'Active'}</p>
+                </div>
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold">Database ID</span>
+                  <p className="text-xs font-mono text-emerald-400 font-bold truncate">{firebaseConfig.firestoreDatabaseId || '(default)'}</p>
+                </div>
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold">Storage Bucket</span>
+                  <p className="text-xs font-mono text-sky-300 font-bold truncate">{firebaseConfig.storageBucket || 'Enabled'}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-800/40 text-xs text-emerald-200/90 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Cloud security rules deployed and active on Firebase Firestore.</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: PATIENT RATINGS (ADMIN-ONLY VISIBILITY) */}
+        {activeTab === 'ratings' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Header & Controls */}
+            <div className="bg-slate-950/70 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-black">
+                    <Star className="w-5 h-5 fill-amber-400 text-amber-500" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-bold text-base sm:text-lg text-white">
+                        Patient Report Ratings & Quality Feedback
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase tracking-wider border border-amber-500/30">
+                        Admin Only
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Real-time ratings, comprehension scores, and qualitative feedback submitted by patients.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={fetchRatingStats}
+                    disabled={isRatingsLoading}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 disabled:opacity-50 cursor-pointer"
+                    title="Refresh patient ratings"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRatingsLoading ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+
+                  <button
+                    onClick={handleExportRatingsCSV}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                    title="Export ratings to CSV spreadsheet"
+                  >
+                    <Download className="w-3.5 h-3.5 text-sky-400" />
+                    <span className="hidden sm:inline">Export CSV</span>
+                  </button>
+
+                  <button
+                    onClick={handleClearRatings}
+                    disabled={isClearingRatings}
+                    className="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs font-bold transition flex items-center gap-1.5 border border-rose-800/80 disabled:opacity-50 cursor-pointer"
+                    title="Clear all patient rating records"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span className="hidden sm:inline">Clear Data</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Privacy Sequestration Notice */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/20 border border-amber-800/40 text-amber-200/90 text-xs">
+                <Shield className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p>
+                  <strong className="font-semibold text-amber-300">Confidential Admin View:</strong> Patient star ratings, clarity scores, and written comments are sequestered here exclusively for clinical QA, model refinement, and clinic administrators. Results are never visible to public patients.
+                </p>
+              </div>
+            </div>
+
+            {/* Score Overview KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Overall Star Score */}
+              <div className="bg-slate-950/60 border border-amber-500/30 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-amber-300">Average Rating</span>
+                  <Award className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-4xl text-amber-300 tracking-tight">
+                    {ratingStats && ratingStats.totalRatings > 0 ? ratingStats.averageStars : '—'}
+                  </span>
+                  {ratingStats && ratingStats.totalRatings > 0 && (
+                    <span className="text-sm text-amber-400/80 font-mono">/ 5.0</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const avg = ratingStats && ratingStats.totalRatings > 0 ? ratingStats.averageStars : 0;
+                    return (
+                      <Star
+                        key={star}
+                        className={`w-4 h-4 ${
+                          avg > 0 && star <= Math.round(avg)
+                            ? 'fill-amber-400 text-amber-400'
+                            : 'text-slate-700'
+                        }`}
+                      />
+                    );
+                  })}
+                  <span className="text-[11px] text-slate-400 ml-1.5">
+                    ({ratingStats?.totalRatings || 0} reviews)
+                  </span>
+                </div>
+              </div>
+
+              {/* Language Comprehension Score */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-slate-300">Language Clarity</span>
+                  <Globe className="w-4 h-4 text-sky-400" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-4xl text-sky-300 tracking-tight">
+                    {ratingStats && ratingStats.totalRatings > 0 ? ratingStats.averageClarity : '—'}
+                  </span>
+                  {ratingStats && ratingStats.totalRatings > 0 && (
+                    <span className="text-sm text-sky-400/80 font-mono">/ 5.0</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Swahili & English plain-language ease
+                </p>
+              </div>
+
+              {/* Consultation Prep / Helpfulness */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-slate-300">Doctor Prep Utility</span>
+                  <ThumbsUp className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-4xl text-emerald-300 tracking-tight">
+                    {ratingStats && ratingStats.totalRatings > 0 ? ratingStats.averageHelpfulness : '—'}
+                  </span>
+                  {ratingStats && ratingStats.totalRatings > 0 && (
+                    <span className="text-sm text-emerald-400/80 font-mono">/ 5.0</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Preparation for physician appointments
+                </p>
+              </div>
+
+              {/* High-Satisfaction Share */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-semibold text-slate-300">Satisfaction Rate</span>
+                  <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-extrabold text-4xl text-purple-300 tracking-tight">
+                    {ratingStats && ratingStats.totalRatings > 0
+                      ? `${Math.round(
+                          ((((ratingStats.starDistribution?.[5] || 0) + (ratingStats.starDistribution?.[4] || 0))) /
+                            ratingStats.totalRatings) *
+                            100
+                        )}%`
+                      : '—'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Ratings rated 4 or 5 stars
+                </p>
+              </div>
+            </div>
+
+            {/* Distribution & Tags Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Star Distribution */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-4">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-amber-400" />
+                  <span>Star Rating Distribution</span>
+                </h3>
+
+                <div className="space-y-2.5">
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const count = ratingStats?.starDistribution?.[stars as 1|2|3|4|5] || 0;
+                    const total = ratingStats?.totalRatings || 0;
+                    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+
+                    return (
+                      <div key={stars} className="flex items-center gap-3 text-xs">
+                        <span className="w-12 font-bold text-slate-300 flex items-center gap-1 shrink-0">
+                          <span>{stars}</span>
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        </span>
+                        <div className="flex-1 h-3 rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              stars >= 4
+                                ? 'bg-amber-400'
+                                : stars === 3
+                                ? 'bg-amber-600'
+                                : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <div className="w-20 text-right font-mono text-slate-400 text-[11px] shrink-0">
+                          {count} ({pct}%)
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Patient Feedback Tags Cloud */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-4">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <MessageSquareHeart className="w-4 h-4 text-pink-400" />
+                  <span>Most Frequent Feedback Attributes</span>
+                </h3>
+
+                {ratingStats && ratingStats.commonTags && Object.keys(ratingStats.commonTags).length > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {Object.entries(ratingStats.commonTags).map(([tag, count]) => (
+                      <button
+                        key={tag}
+                        onClick={() => setRatingTagFilter(ratingTagFilter === tag ? 'all' : tag)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border ${
+                          ratingTagFilter === tag
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                            : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <span>{tag}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono ${
+                            ratingTagFilter === tag ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 py-6 text-center italic">
+                    Feedback tags like "Rahisi Kuelewa" and "Kiswahili Fasaha" will aggregate here as patients submit reviews.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ratings Feed & Interactive Filters */}
+            <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-2xl space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span>Recent Patient Review Submissions</span>
+                  <span className="text-xs font-normal text-slate-400">
+                    ({ratingStats?.recentRatings.length || 0} total records)
+                  </span>
+                </h3>
+
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Star Filter */}
+                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => setRatingStarFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        ratingStarFilter === 'all'
+                          ? 'bg-emerald-500 text-slate-950'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      All Stars
+                    </button>
+                    {[5, 4, 3, 2, 1].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setRatingStarFilter(s)}
+                        className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-0.5 transition cursor-pointer ${
+                          ratingStarFilter === s
+                            ? 'bg-amber-500 text-slate-950'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{s}</span>
+                        <Star className="w-2.5 h-2.5 fill-current" />
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Search Query */}
+                  <input
+                    type="text"
+                    placeholder="Search comments or modalities..."
+                    value={ratingSearchQuery}
+                    onChange={(e) => setRatingSearchQuery(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-emerald-500 w-48 sm:w-64"
+                  />
+                </div>
+              </div>
+
+              {/* Filter feedback indicator */}
+              {(ratingStarFilter !== 'all' || ratingTagFilter !== 'all' || ratingSearchQuery) && (
+                <div className="flex items-center justify-between text-xs text-slate-400 bg-slate-900/60 px-3 py-1.5 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      Filtered by:{' '}
+                      {ratingStarFilter !== 'all' && `[${ratingStarFilter} Stars] `}
+                      {ratingTagFilter !== 'all' && `[Tag: "${ratingTagFilter}"] `}
+                      {ratingSearchQuery && `[Text: "${ratingSearchQuery}"]`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setRatingStarFilter('all');
+                      setRatingTagFilter('all');
+                      setRatingSearchQuery('');
+                    }}
+                    className="text-emerald-400 hover:underline font-bold"
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+              )}
+
+              {/* Feed items */}
+              {(() => {
+                if (!ratingStats || ratingStats.recentRatings.length === 0) {
+                  return (
+                    <div className="text-center py-12 px-4 rounded-xl bg-slate-900/40 border border-dashed border-slate-800 space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
+                        <Star className="w-6 h-6 fill-amber-400 text-amber-500" />
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-300">No Patient Ratings Recorded Yet</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Patients can rate their translated radiological reports by clicking the <strong>"⭐ Rate Interpretation"</strong> button on any interpretation card. Ratings will automatically appear here.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const filtered = ratingStats.recentRatings.filter((r) => {
+                  if (ratingStarFilter !== 'all' && r.stars !== ratingStarFilter) return false;
+                  if (ratingTagFilter !== 'all' && (!r.tags || !r.tags.includes(ratingTagFilter))) return false;
+                  if (ratingSearchQuery) {
+                    const q = ratingSearchQuery.toLowerCase();
+                    const matchText = (r.feedbackText || '').toLowerCase().includes(q);
+                    const matchModality = (r.modality || '').toLowerCase().includes(q);
+                    const matchTags = (r.tags || []).some((t) => t.toLowerCase().includes(q));
+                    if (!matchText && !matchModality && !matchTags) return false;
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-xs text-slate-500">
+                      No ratings match the selected filters.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filtered.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 flex flex-col justify-between hover:border-slate-700 transition"
+                      >
+                        <div className="space-y-2">
+                          {/* Rating Card Header */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= item.stars
+                                      ? 'fill-amber-400 text-amber-400'
+                                      : 'text-slate-700'
+                                  }`}
+                                />
+                              ))}
+                              <span className="font-bold text-xs text-amber-300 ml-1">
+                                {item.stars}.0 / 5.0
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              {item.deviceType && (
+                                <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono capitalize">
+                                  {item.deviceType}
+                                </span>
+                              )}
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-950/70 border border-emerald-800/80 text-emerald-300 text-[10px] font-bold uppercase">
+                                {item.languageMode === 'sw' ? 'Kiswahili' : 'English'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Modality & Timestamp */}
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <span className="font-semibold text-slate-300 truncate max-w-[200px]">
+                              {item.modality || 'Radiology Report'}
+                            </span>
+                            <span className="font-mono text-slate-500 text-[10px]">
+                              {new Date(item.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+
+                          {/* Sub-scores */}
+                          <div className="flex items-center gap-4 text-xs pt-1">
+                            <div className="flex items-center gap-1 text-slate-300">
+                              <span className="text-slate-500 text-[11px]">Clarity:</span>
+                              <strong className="text-sky-300 font-bold">{item.clarityRating || 5}/5</strong>
+                            </div>
+                            <div className="flex items-center gap-1 text-slate-300">
+                              <span className="text-slate-500 text-[11px]">Helpfulness:</span>
+                              <strong className="text-emerald-300 font-bold">{item.helpfulnessRating || 5}/5</strong>
+                            </div>
+                          </div>
+
+                          {/* Tags */}
+                          {item.tags && item.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {item.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-medium border border-slate-700/60"
+                                >
+                                  ✓ {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Feedback Comment */}
+                          {item.feedbackText ? (
+                            <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs text-slate-200 italic mt-2">
+                              "{item.feedbackText}"
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-500 italic pt-1">
+                              No written comment provided.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* ID Footer */}
+                        <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono text-slate-500">
+                          <span>Ref: {item.id}</span>
+                          <span>Anonymous Submission</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

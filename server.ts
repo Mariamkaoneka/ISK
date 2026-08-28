@@ -33,12 +33,293 @@ function getGenAI(): GoogleGenAI {
   return genAIClient;
 }
 
-// Health check endpoint
+// In-memory traffic & application hits metrics store
+interface HitRecord {
+  id: string;
+  timestamp: number;
+  category: 'page_view' | 'interpretation' | 'audio_play' | 'sample_load' | 'admin_access';
+  description: string;
+  path: string;
+  deviceType: 'mobile' | 'tablet' | 'desktop';
+  status: 'success' | 'failed' | 'active';
+  durationMs?: number;
+}
+
+const appHitData = {
+  totalHits: 0,
+  pageViews: 0,
+  interpretationsCount: 0,
+  audioPlaysCount: 0,
+  sampleViewsCount: 0,
+  adminAccessCount: 0,
+  todayDateStr: new Date().toISOString().slice(0, 10),
+  todayHits: 0,
+  deviceBreakdown: {
+    mobile: 0,
+    desktop: 0,
+    tablet: 0,
+  },
+  categoryBreakdown: {
+    page_view: 0,
+    interpretation: 0,
+    audio_play: 0,
+    sample_load: 0,
+    admin_access: 0,
+  },
+  recentHits: [] as HitRecord[],
+  startTime: Date.now(),
+};
+
+function detectDevice(req?: Request, clientDeviceHint?: string): 'mobile' | 'tablet' | 'desktop' {
+  if (clientDeviceHint && ['mobile', 'tablet', 'desktop'].includes(clientDeviceHint)) {
+    return clientDeviceHint as 'mobile' | 'tablet' | 'desktop';
+  }
+  const ua = req?.headers['user-agent']?.toLowerCase() || '';
+  if (/ipad|tablet|(android(?!.*mobile))/i.test(ua)) {
+    return 'tablet';
+  }
+  if (/mobile|iphone|ipod|android.*mobile|blackberry|phone/i.test(ua)) {
+    return 'mobile';
+  }
+  return 'desktop';
+}
+
+function recordHit(
+  category: HitRecord['category'],
+  description: string,
+  path: string,
+  req?: Request,
+  status: HitRecord['status'] = 'success',
+  durationMs?: number,
+  clientDeviceHint?: string
+) {
+  const currentDateStr = new Date().toISOString().slice(0, 10);
+  if (appHitData.todayDateStr !== currentDateStr) {
+    appHitData.todayDateStr = currentDateStr;
+    appHitData.todayHits = 0;
+  }
+
+  if (category === 'page_view') appHitData.pageViews += 1;
+  else if (category === 'interpretation') appHitData.interpretationsCount += 1;
+  else if (category === 'audio_play') appHitData.audioPlaysCount += 1;
+  else if (category === 'sample_load') appHitData.sampleViewsCount += 1;
+  else if (category === 'admin_access') appHitData.adminAccessCount += 1;
+
+  appHitData.totalHits =
+    appHitData.pageViews +
+    appHitData.interpretationsCount +
+    appHitData.audioPlaysCount +
+    appHitData.sampleViewsCount +
+    appHitData.adminAccessCount;
+
+  appHitData.todayHits += 1;
+
+  if (appHitData.categoryBreakdown[category] !== undefined) {
+    appHitData.categoryBreakdown[category] += 1;
+  }
+
+  const device = detectDevice(req, clientDeviceHint);
+  if (appHitData.deviceBreakdown[device] !== undefined) {
+    appHitData.deviceBreakdown[device] += 1;
+  }
+
+  const record: HitRecord = {
+    id: `hit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: Date.now(),
+    category,
+    description,
+    path,
+    deviceType: device,
+    status,
+    durationMs,
+  };
+
+  appHitData.recentHits = [record, ...appHitData.recentHits.slice(0, 49)];
+}
+
+// Health check endpoint (does not create artificial user hits)
 app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", service: "Tanzania Radiology Interpreter API" });
+  res.json({ status: "ok", service: "Tanzania Radiology Interpreter API", totalHits: appHitData.totalHits });
 });
 
-// Administrative diagnostics endpoint (checks API key, model availability, uptime)
+// Explicit client telemetry endpoint for logging front-end app hits
+app.post("/api/track-hit", (req: Request, res: Response) => {
+  const { category, description, path: clientPath, deviceType, durationMs } = req.body || {};
+  const validCategories: HitRecord['category'][] = ['page_view', 'interpretation', 'audio_play', 'sample_load', 'admin_access'];
+  const validCategory = validCategories.includes(category) ? (category as HitRecord['category']) : 'page_view';
+  const validDesc = description || (validCategory === 'page_view' ? 'Patient Page Visit' : 'User Action');
+  const validPath = clientPath || '/';
+
+  recordHit(validCategory, validDesc, validPath, req, 'success', durationMs, deviceType);
+
+  res.json({
+    ok: true,
+    totalHits: appHitData.totalHits,
+    todayHits: appHitData.todayHits,
+  });
+});
+
+// Dedicated hits statistics endpoint for owner interface
+app.get("/api/admin/hits", (_req: Request, res: Response) => {
+  res.json({
+    totalHits: appHitData.totalHits,
+    todayHits: appHitData.todayHits,
+    pageViews: appHitData.pageViews,
+    interpretationsCount: appHitData.interpretationsCount,
+    audioPlaysCount: appHitData.audioPlaysCount,
+    sampleViewsCount: appHitData.sampleViewsCount,
+    adminAccessCount: appHitData.adminAccessCount,
+    deviceBreakdown: appHitData.deviceBreakdown,
+    categoryBreakdown: appHitData.categoryBreakdown,
+    recentHits: appHitData.recentHits,
+    lastHitTimestamp: appHitData.recentHits[0]?.timestamp || Date.now(),
+    serverUptimeSeconds: Math.floor(process.uptime()),
+  });
+});
+
+// Reset hits endpoint (for owner testing / clean baseline)
+app.post("/api/admin/reset-hits", (_req: Request, res: Response) => {
+  appHitData.totalHits = 0;
+  appHitData.todayHits = 0;
+  appHitData.pageViews = 0;
+  appHitData.interpretationsCount = 0;
+  appHitData.audioPlaysCount = 0;
+  appHitData.sampleViewsCount = 0;
+  appHitData.adminAccessCount = 0;
+  appHitData.deviceBreakdown = { mobile: 0, desktop: 0, tablet: 0 };
+  appHitData.categoryBreakdown = {
+    page_view: 0,
+    interpretation: 0,
+    audio_play: 0,
+    sample_load: 0,
+    admin_access: 0,
+  };
+  appHitData.recentHits = [];
+  res.json({ ok: true, message: "App hits counter reset successfully" });
+});
+
+// Patient Rating Storage & Endpoints (Ratings visible ONLY to Admin)
+interface ServerRatingRecord {
+  id: string;
+  timestamp: number;
+  stars: number;
+  clarityRating?: number;
+  helpfulnessRating?: number;
+  feedbackText?: string;
+  tags?: string[];
+  modality?: string;
+  bodyRegion?: string;
+  languageMode?: string;
+  deviceType?: 'mobile' | 'tablet' | 'desktop';
+}
+
+const patientRatingsList: ServerRatingRecord[] = [];
+
+// Public Endpoint: User submits report rating
+app.post("/api/rate-interpretation", (req: Request, res: Response) => {
+  try {
+    const {
+      stars,
+      clarityRating,
+      helpfulnessRating,
+      feedbackText,
+      tags,
+      modality,
+      bodyRegion,
+      languageMode,
+      deviceType,
+    } = req.body || {};
+
+    const numStars = Math.min(5, Math.max(1, parseInt(stars, 10) || 5));
+    const cleanClarity = clarityRating ? Math.min(5, Math.max(1, parseInt(clarityRating, 10))) : undefined;
+    const cleanHelpfulness = helpfulnessRating ? Math.min(5, Math.max(1, parseInt(helpfulnessRating, 10))) : undefined;
+    const cleanTags = Array.isArray(tags) ? tags.map((t) => String(t).slice(0, 50)) : [];
+    const cleanFeedback = feedbackText && typeof feedbackText === 'string' ? feedbackText.slice(0, 800).trim() : undefined;
+    const clientDevice = detectDevice(req, deviceType);
+
+    const newRating: ServerRatingRecord = {
+      id: `rate-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: Date.now(),
+      stars: numStars,
+      clarityRating: cleanClarity,
+      helpfulnessRating: cleanHelpfulness,
+      feedbackText: cleanFeedback,
+      tags: cleanTags,
+      modality: modality ? String(modality).slice(0, 60) : undefined,
+      bodyRegion: bodyRegion ? String(bodyRegion).slice(0, 60) : undefined,
+      languageMode: languageMode ? String(languageMode).slice(0, 10) : undefined,
+      deviceType: clientDevice,
+    };
+
+    patientRatingsList.unshift(newRating);
+    if (patientRatingsList.length > 200) {
+      patientRatingsList.pop();
+    }
+
+    res.json({
+      ok: true,
+      message: "Rating saved successfully. Thank you for your feedback!",
+      ratingId: newRating.id,
+    });
+  } catch (error: any) {
+    console.error("Error saving patient rating:", error);
+    res.status(500).json({ error: "Failed to record rating" });
+  }
+});
+
+// Admin-Only Endpoint: Fetch all patient ratings and aggregate metrics
+app.get("/api/admin/ratings", (_req: Request, res: Response) => {
+  const totalRatings = patientRatingsList.length;
+  let totalStars = 0;
+  let totalClarity = 0;
+  let clarityCount = 0;
+  let totalHelpfulness = 0;
+  let helpfulnessCount = 0;
+
+  const starDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const commonTags: Record<string, number> = {};
+
+  for (const r of patientRatingsList) {
+    totalStars += r.stars;
+    starDistribution[r.stars] = (starDistribution[r.stars] || 0) + 1;
+
+    if (r.clarityRating) {
+      totalClarity += r.clarityRating;
+      clarityCount += 1;
+    }
+    if (r.helpfulnessRating) {
+      totalHelpfulness += r.helpfulnessRating;
+      helpfulnessCount += 1;
+    }
+    if (r.tags) {
+      for (const tag of r.tags) {
+        commonTags[tag] = (commonTags[tag] || 0) + 1;
+      }
+    }
+  }
+
+  const averageStars = totalRatings > 0 ? Number((totalStars / totalRatings).toFixed(1)) : 0;
+  const averageClarity = clarityCount > 0 ? Number((totalClarity / clarityCount).toFixed(1)) : 0;
+  const averageHelpfulness = helpfulnessCount > 0 ? Number((totalHelpfulness / helpfulnessCount).toFixed(1)) : 0;
+
+  res.json({
+    totalRatings,
+    averageStars,
+    averageClarity,
+    averageHelpfulness,
+    starDistribution,
+    commonTags,
+    recentRatings: patientRatingsList,
+  });
+});
+
+// Admin-Only Endpoint: Clear/Reset ratings
+app.post("/api/admin/clear-ratings", (_req: Request, res: Response) => {
+  patientRatingsList.length = 0;
+  res.json({ ok: true, message: "Patient ratings have been cleared." });
+});
+
+// Administrative diagnostics endpoint (checks API key, model availability, uptime, hits)
 app.get("/api/admin/diagnostics", async (_req: Request, res: Response) => {
   const apiKeyPresent = Boolean(process.env.GEMINI_API_KEY);
   const models = [
@@ -55,6 +336,18 @@ app.get("/api/admin/diagnostics", async (_req: Request, res: Response) => {
     models: models,
     serverEnvironment: process.env.NODE_ENV || "development",
     privacyCompliance: "Strict Zero-Storage Enforced (Ephemeral In-Memory Processing)",
+    hits: {
+      totalHits: appHitData.totalHits,
+      todayHits: appHitData.todayHits,
+      pageViews: appHitData.pageViews,
+      interpretationsCount: appHitData.interpretationsCount,
+      audioPlaysCount: appHitData.audioPlaysCount,
+      sampleViewsCount: appHitData.sampleViewsCount,
+      adminAccessCount: appHitData.adminAccessCount,
+      deviceBreakdown: appHitData.deviceBreakdown,
+      categoryBreakdown: appHitData.categoryBreakdown,
+      recentHits: appHitData.recentHits.slice(0, 15),
+    },
   });
 });
 
@@ -563,9 +856,24 @@ Remember:
       throw new Error("Failed to interpret radiology report document.");
     }
 
+    recordHit(
+      'interpretation',
+      `Radiology Interpretation: ${parsedData.modality || 'Report'} (${parsedData.bodyRegion || 'General'})`,
+      '/api/interpret',
+      req,
+      'success'
+    );
+
     res.json(parsedData);
   } catch (error: any) {
     console.error("Error during radiology interpretation:", error);
+    recordHit(
+      'interpretation',
+      `Failed Interpretation Attempt: ${error?.message || 'Error'}`,
+      '/api/interpret',
+      req,
+      'failed'
+    );
     const rawMsg = String(error?.message || error || "");
     const isQuotaOrOverloaded =
       rawMsg.includes("503") ||

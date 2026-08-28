@@ -113,3 +113,72 @@ export interface AdminStats {
   methodCounts: Record<string, number>;
   languageCounts: Record<string, number>;
 }
+
+export interface AppHitLog {
+  id: string;
+  timestamp: number;
+  category: 'page_view' | 'interpretation' | 'audio_play' | 'sample_load' | 'admin_access' | 'api_request';
+  description: string;
+  path: string;
+  deviceType?: 'mobile' | 'tablet' | 'desktop';
+  status: 'success' | 'failed' | 'active';
+  durationMs?: number;
+}
+
+export interface AppHitStats {
+  totalHits: number;
+  todayHits: number;
+  pageViews: number;
+  interpretationsCount: number;
+  audioPlaysCount: number;
+  sampleViewsCount: number;
+  adminAccessCount: number;
+  apiRequestsCount: number;
+  deviceBreakdown: {
+    mobile: number;
+    desktop: number;
+    tablet: number;
+  };
+  categoryBreakdown: {
+    page_view: number;
+    interpretation: number;
+    audio_play: number;
+    sample_load: number;
+    admin_access: number;
+    api_request: number;
+  };
+  recentHits: AppHitLog[];
+  lastHitTimestamp: number;
+  serverUptimeSeconds: number;
+}
+
+export interface InterpretationRating {
+  id: string;
+  timestamp: number;
+  stars: number; // 1 to 5
+  clarityRating?: number; // 1 to 5
+  helpfulnessRating?: number; // 1 to 5
+  feedbackText?: string;
+  tags?: string[];
+  modality?: string;
+  bodyRegion?: string;
+  languageMode?: string;
+  deviceType?: 'mobile' | 'tablet' | 'desktop';
+}
+
+export interface RatingStats {
+  totalRatings: number;
+  averageStars: number;
+  averageClarity: number;
+  averageHelpfulness: number;
+  starDistribution: {
+    1: number;
+    2: number;
+    3: number;
+    4: number;
+    5: number;
+  };
+  commonTags: Record<string, number>;
+  recentRatings: InterpretationRating[];
+}
+

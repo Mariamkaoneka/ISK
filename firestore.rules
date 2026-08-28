@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Public / Client settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || true; // Configurable by admin or initial setup
+    }
+
+    // Patient Ratings & Feedback
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow create: if true; // Patients submit ratings anonymously or logged in
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Audit logs for interpretations
+    match /auditLogs/{logId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    // App telemetry / Hits
+    match /appHits/{hitId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated();
+    }
+
+    // Saved Patient Interpretations / History
+    match /savedInterpretations/{docId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthenticated() || (resource.data.userId == request.auth.uid);
+    }
+
+    // User profiles & auth records
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAuthenticated();
+    }
+  }
+}

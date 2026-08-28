@@ -10,6 +10,16 @@ import { PrivacyModal } from './components/PrivacyModal';
 import { AboutModal } from './components/AboutModal';
 import { InterpretationResponse, LanguageMode, OwnerSettings, AuditLogEntry } from './types';
 import { DEFAULT_OWNER_SETTINGS } from './data/defaultOwnerSettings';
+import {
+  ensureAuth,
+  saveSettingsToFirestore,
+  loadSettingsFromFirestore,
+  logAuditToFirestore,
+  fetchAuditLogsFromFirestore,
+  recordAppHitToFirestore,
+  saveInterpretationToHistory,
+  isFirebaseConfigured,
+} from './lib/firebase';
 import { ShieldCheck, Heart, Info, AlertCircle, Stethoscope, Lock, FileText, Sparkles } from 'lucide-react';
 
 const STORAGE_KEY = 'afya_radiology_owner_settings';
@@ -68,6 +78,74 @@ export default function App() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Track app hit helper
+  const trackHit = (category: string, description: string) => {
+    try {
+      const isMobile = /mobile|iphone|ipod|android.*mobile/i.test(navigator.userAgent);
+      const isTablet = /ipad|tablet|(android(?!.*mobile))/i.test(navigator.userAgent);
+      const deviceType = isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop';
+
+      fetch('/api/track-hit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, description, path: window.location.pathname, deviceType }),
+      }).catch(() => {});
+
+      if (isFirebaseConfigured) {
+        recordAppHitToFirestore({
+          timestamp: Date.now(),
+          category: category as any,
+          description,
+          path: window.location.pathname,
+          deviceType,
+          status: 'success',
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Ignore telemetry errors
+    }
+  };
+
+  // Initialize Firebase Auth, sync settings & initial telemetry (strictly once per session)
+  useEffect(() => {
+    try {
+      const alreadyTracked = sessionStorage.getItem('tafsiri_session_pv_logged');
+      if (!alreadyTracked) {
+        sessionStorage.setItem('tafsiri_session_pv_logged', 'true');
+        trackHit('page_view', 'Patient Portal Loaded');
+      }
+    } catch {
+      // Ignore storage errors
+    }
+
+    if (isFirebaseConfigured) {
+      ensureAuth().catch((err) => console.warn('Auth init:', err));
+
+      // Attempt to load latest cloud settings from Firestore
+      loadSettingsFromFirestore().then((cloudSettings) => {
+        if (cloudSettings) {
+          setSettings((prev) => ({
+            ...prev,
+            ...cloudSettings,
+            theme: { ...prev.theme, ...(cloudSettings.theme || {}) },
+            text: { ...prev.text, ...(cloudSettings.text || {}) },
+          }));
+        }
+      }).catch(() => {});
+
+      // Fetch initial cloud audit logs
+      fetchAuditLogsFromFirestore(50).then((cloudLogs) => {
+        if (cloudLogs && cloudLogs.length > 0) {
+          setAuditLogs((prev) => {
+            const combined = [...cloudLogs, ...prev];
+            const unique = Array.from(new Map(combined.map(item => [item.id || `${item.timestamp}`, item])).values());
+            return unique.sort((a, b) => b.timestamp - a.timestamp).slice(0, 50);
+          });
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   // Keyboard shortcut listener for discreet admin access (Alt+A or Ctrl+Shift+A or #admin)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,6 +179,11 @@ export default function App() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newSettings));
     } catch (e) {
       console.error('Failed to save settings:', e);
+    }
+    if (isFirebaseConfigured) {
+      saveSettingsToFirestore(newSettings).catch((err) => {
+        console.warn('Could not sync settings to Firestore:', err);
+      });
     }
   };
 
@@ -150,7 +233,7 @@ export default function App() {
       setInterpretation(resultData);
       setLastPayload(null);
 
-      // Record ephemeral audit log entry for admin telemetry
+      // Record ephemeral & persistent Firestore audit log entry
       const logEntry: AuditLogEntry = {
         id: `log-${Date.now()}`,
         timestamp: Date.now(),
@@ -163,6 +246,18 @@ export default function App() {
         wordCount: (payload.text || '').split(/\s+/).filter(Boolean).length,
       };
       setAuditLogs((prev) => [logEntry, ...prev.slice(0, 49)]);
+
+      if (isFirebaseConfigured) {
+        logAuditToFirestore(logEntry).catch(() => {});
+        saveInterpretationToHistory({
+          timestamp: Date.now(),
+          modality: resultData.modality,
+          bodyRegion: resultData.bodyRegion,
+          overallSummary_sw: resultData.overallSummary_sw,
+          overallSummary_en: resultData.overallSummary_en,
+          data: resultData,
+        }).catch(() => {});
+      }
 
       // Smooth scroll to top of interpretation
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -187,6 +282,10 @@ export default function App() {
         errorMessage: err.message,
       };
       setAuditLogs((prev) => [logEntry, ...prev.slice(0, 49)]);
+
+      if (isFirebaseConfigured) {
+        logAuditToFirestore(logEntry).catch(() => {});
+      }
 
       setErrorMessage(
         isSwahili
@@ -298,6 +397,7 @@ export default function App() {
         onAuthenticate={() => {
           setShowAdminAuthModal(false);
           setIsAdminAuthenticated(true);
+          trackHit('admin_access', 'Staff Admin Portal Opened');
         }}
         currentPin={settings.adminPin || '1234'}
       />

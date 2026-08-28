@@ -19,10 +19,14 @@ import {
   MessageCircle,
   Bluetooth,
   Smartphone,
-  X
+  X,
+  Star,
+  ThumbsUp,
+  MessageSquareHeart
 } from 'lucide-react';
 import { InterpretationResponse, LanguageMode } from '../types';
 import { generateInterpretationPDF } from '../utils/pdfGenerator';
+import { saveRatingToFirestore, isFirebaseConfigured } from '../lib/firebase';
 
 interface InterpretationDashboardProps {
   data: InterpretationResponse;
@@ -46,6 +50,18 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
   const [showRawTextModal, setShowRawTextModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [bluetoothStatus, setBluetoothStatus] = useState<string>('');
+
+  // Rating state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingStars, setRatingStars] = useState<number>(5);
+  const [hoverStars, setHoverStars] = useState<number | null>(null);
+  const [ratingClarity, setRatingClarity] = useState<number>(5);
+  const [ratingHelpfulness, setRatingHelpfulness] = useState<number>(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [hasRated, setHasRated] = useState(false);
+  const [ratingSuccessMessage, setRatingSuccessMessage] = useState<string | null>(null);
 
   // Generate complete text for sharing
   const generateShareText = () => {
@@ -87,6 +103,57 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
     const subject = encodeURIComponent(`Ufafanuzi wa Ripoti ya Radiology: ${data.modality}`);
     const body = encodeURIComponent(generateShareText());
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
+
+  // Submit Rating to Server
+  const handleSubmitRating = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSubmittingRating(true);
+    try {
+      const isMobile = /mobile|iphone|ipod|android.*mobile/i.test(navigator.userAgent);
+      const isTablet = /ipad|tablet|(android(?!.*mobile))/i.test(navigator.userAgent);
+      const deviceType: 'mobile' | 'tablet' | 'desktop' = isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop';
+
+      const ratingPayload = {
+        stars: ratingStars,
+        clarityRating: ratingClarity,
+        helpfulnessRating: ratingHelpfulness,
+        feedbackText: ratingComment,
+        tags: selectedTags,
+        modality: data.modality,
+        bodyRegion: data.bodyRegion,
+        languageMode: languageMode,
+        deviceType: deviceType,
+        timestamp: Date.now(),
+      };
+
+      const res = await fetch('/api/rate-interpretation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ratingPayload),
+      });
+
+      if (isFirebaseConfigured) {
+        saveRatingToFirestore(ratingPayload).catch(() => {});
+      }
+
+      if (res.ok) {
+        setHasRated(true);
+        setRatingSuccessMessage(
+          isSwahili
+            ? 'Asante sana kwa tathmini yako! Maoni haya yanasaidia kuboresha tafsiri ya kimatibabu.'
+            : 'Thank you for your rating! Your feedback helps optimize medical interpretation precision.'
+        );
+        setTimeout(() => {
+          setShowRatingModal(false);
+          setRatingSuccessMessage(null);
+        }, 1800);
+      }
+    } catch (err) {
+      console.error('Error submitting rating:', err);
+    } finally {
+      setIsSubmittingRating(false);
+    }
   };
 
   // 3. Telegram Sharing
@@ -475,15 +542,77 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
               </ul>
             </div>
           )}
+
+          {/* Quick Rate Interpretation Banner */}
+          <div
+            id="card-quick-rate"
+            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 shrink-0">
+                <Star className="w-5 h-5 fill-amber-400 text-amber-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>{isSwahili ? 'Je, Ufafanuzi Huu Umekusaidia?' : 'How Helpful Was This Interpretation?'}</span>
+                  {hasRated && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      {isSwahili ? '✓ Imekadiriwa' : '✓ Rated'}
+                    </span>
+                  )}
+                </h4>
+                <p className="text-xs text-slate-600">
+                  {isSwahili
+                    ? 'Toa tathmini ya nyota 1-5 ili kusaidia kuboresha mawasiliano ya kimatibabu.'
+                    : 'Rate 1-5 stars to help clinical teams optimize radiological explanations.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+              {/* Star selector buttons */}
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => {
+                      setRatingStars(star);
+                      setShowRatingModal(true);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-amber-100/80 text-amber-400 hover:text-amber-500 transition active:scale-95 cursor-pointer"
+                    title={isSwahili ? `Kadiria Nyota ${star}` : `Rate ${star} Stars`}
+                  >
+                    <Star
+                      className={`w-5 h-5 ${
+                        (hasRated ? ratingStars : 5) >= star
+                          ? 'fill-amber-400 text-amber-500'
+                          : 'text-slate-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowRatingModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Star className="w-3.5 h-3.5 fill-current" />
+                <span>{hasRated ? (isSwahili ? 'Hariri Tathmini' : 'Edit Rating') : (isSwahili ? 'Kadiria Ripoti' : 'Rate Report')}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Action Buttons in Vibrant Palette Style */}
-        <div className="p-6 bg-slate-50 border-t-2 border-slate-100 flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="p-6 bg-slate-50 border-t-2 border-slate-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button
             id="btn-download-pdf"
             type="button"
             onClick={handleDownloadPDF}
-            className="flex-1 py-3.5 bg-slate-950 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
+            className="w-full py-3.5 bg-slate-950 hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
           >
             <Download className="w-4 h-4 stroke-[2.5]" />
             <span>{isSwahili ? 'Pakua PDF' : 'Download PDF'}</span>
@@ -493,20 +622,38 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             id="btn-share"
             type="button"
             onClick={() => setShowShareModal(true)}
-            className="flex-1 py-3.5 border-2 border-slate-200 bg-white hover:bg-slate-100 text-slate-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
+            className="w-full py-3.5 border-2 border-slate-200 bg-white hover:bg-slate-100 text-slate-900 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
           >
             <Share2 className="w-4 h-4 text-[#00A3DD]" />
             <span>{isSwahili ? 'Sambaza / Shiriki' : 'Share Options'}</span>
           </button>
 
           <button
+            id="btn-rate-interpretation"
+            type="button"
+            onClick={() => setShowRatingModal(true)}
+            className={`w-full py-3.5 border-2 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer ${
+              hasRated
+                ? 'border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-950'
+                : 'border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-950'
+            }`}
+          >
+            <Star className={`w-4 h-4 ${hasRated ? 'fill-emerald-500 text-emerald-600' : 'fill-amber-400 text-amber-600'}`} />
+            <span>
+              {hasRated
+                ? (isSwahili ? `Umekadiriwa ★${ratingStars}` : `Rated ★${ratingStars}`)
+                : (isSwahili ? 'Kadiria Ufafanuzi' : 'Rate Interpretation')}
+            </span>
+          </button>
+
+          <button
             id="btn-start-over"
             type="button"
             onClick={onReset}
-            className="flex-1 py-3.5 border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-950 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
+            className="w-full py-3.5 border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-xs hover:shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-98 cursor-pointer"
             title={isSwahili ? 'Anza upya kufafanua ripoti nyingine' : 'Start over and interpret another report'}
           >
-            <RotateCcw className="w-4 h-4 text-amber-800" />
+            <RotateCcw className="w-4 h-4 text-slate-600" />
             <span>{isSwahili ? 'Anza Upya' : 'Start Over'}</span>
           </button>
         </div>
@@ -763,7 +910,7 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
               </h3>
               <button
                 onClick={() => setShowRawTextModal(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold p-1"
+                className="text-slate-400 hover:text-slate-700 text-sm font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
@@ -774,11 +921,252 @@ export const InterpretationDashboard: React.FC<InterpretationDashboardProps> = (
             <div className="p-4 border-t-2 border-slate-100 bg-white flex justify-end">
               <button
                 onClick={() => setShowRawTextModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold"
+                className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold cursor-pointer"
               >
                 {isSwahili ? 'Funga' : 'Close'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RATE INTERPRETATION MODAL */}
+      {showRatingModal && (
+        <div
+          id="modal-rate-interpretation"
+          className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fadeIn"
+        >
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border-2 border-slate-200 flex flex-col my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b-2 border-slate-100 bg-gradient-to-r from-amber-500/10 to-amber-500/5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-600">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {isSwahili ? 'Kadiria Ufafanuzi wa Ripoti' : 'Rate Report Interpretation'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {data.modality_sw || data.modality} • {data.bodyRegion_sw || data.bodyRegion}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRatingModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-200 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleSubmitRating} className="p-6 space-y-5">
+              {ratingSuccessMessage ? (
+                <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-center space-y-2 animate-fadeIn">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <Check className="w-6 h-6 stroke-[3]" />
+                  </div>
+                  <h4 className="font-bold text-sm text-emerald-900">
+                    {isSwahili ? 'Tathmini Imepokelewa!' : 'Rating Received!'}
+                  </h4>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    {ratingSuccessMessage}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Overall Star Rating */}
+                  <div className="text-center space-y-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      {isSwahili ? 'Tathmini ya Jumla (Nyota 1 - 5)' : 'Overall Quality (1 - 5 Stars)'}
+                    </label>
+
+                    {/* Large interactive Stars */}
+                    <div className="flex items-center justify-center gap-2 py-1">
+                      {[1, 2, 3, 4, 5].map((star) => {
+                        const activeStarCount = hoverStars !== null ? hoverStars : ratingStars;
+                        const isFilled = star <= activeStarCount;
+                        return (
+                          <button
+                            key={star}
+                            type="button"
+                            onMouseEnter={() => setHoverStars(star)}
+                            onMouseLeave={() => setHoverStars(null)}
+                            onClick={() => setRatingStars(star)}
+                            className="p-1.5 transition-transform hover:scale-125 active:scale-95 cursor-pointer focus:outline-hidden"
+                          >
+                            <Star
+                              className={`w-8 h-8 transition-colors ${
+                                isFilled
+                                  ? 'fill-amber-400 text-amber-500 drop-shadow-xs'
+                                  : 'text-slate-300 fill-slate-100'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Star Label Description */}
+                    <div className="text-xs font-bold text-amber-800 bg-amber-50 py-1.5 px-3 rounded-full inline-block border border-amber-200">
+                      {(hoverStars || ratingStars) === 5 && (isSwahili ? '⭐⭐⭐⭐⭐ Bora Kabisa (5/5)' : '⭐⭐⭐⭐⭐ Excellent (5/5)')}
+                      {(hoverStars || ratingStars) === 4 && (isSwahili ? '⭐⭐⭐⭐ Inasaidia Sana (4/5)' : '⭐⭐⭐⭐ Very Helpful (4/5)')}
+                      {(hoverStars || ratingStars) === 3 && (isSwahili ? '⭐⭐⭐ Nzuri (3/5)' : '⭐⭐⭐ Good (3/5)')}
+                      {(hoverStars || ratingStars) === 2 && (isSwahili ? '⭐⭐ Inasaidia Kiasi (2/5)' : '⭐⭐ Fair (2/5)')}
+                      {(hoverStars || ratingStars) === 1 && (isSwahili ? '⭐ Inahitaji Marekebisho (1/5)' : '⭐ Needs Improvement (1/5)')}
+                    </div>
+                  </div>
+
+                  {/* Sub-Ratings: Clarity & Helpfulness */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    {/* Clarity */}
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-800">
+                          {isSwahili ? 'Ufafanuzi Ulikuwa Wazi?' : 'Language Clarity'}
+                        </span>
+                        <span className="font-bold text-amber-600">{ratingClarity}/5</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setRatingClarity(s)}
+                            className={`flex-1 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                              ratingClarity === s
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50'
+                            }`}
+                          >
+                            {s}★
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Doctor Questions / Practical Helpfulness */}
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-800">
+                          {isSwahili ? 'Msaada kwa Daktari?' : 'Doctor Prep Value'}
+                        </span>
+                        <span className="font-bold text-amber-600">{ratingHelpfulness}/5</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setRatingHelpfulness(s)}
+                            className={`flex-1 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                              ratingHelpfulness === s
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50'
+                            }`}
+                          >
+                            {s}★
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Feedback Tag Chips */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      {isSwahili ? 'Ni nini kimeeleweka vizuri zaidi?' : 'What stood out to you? (Select tags)'}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'Rahisi Kuelewa', labelSw: 'Rahisi Kuelewa', labelEn: 'Easy to Understand' },
+                        { id: 'Kiswahili Fasaha', labelSw: 'Kiswahili Fasaha', labelEn: 'Clear Swahili' },
+                        { id: 'Misamiati Sahihi', labelSw: 'Misamiati Sahihi', labelEn: 'Accurate Terms' },
+                        { id: 'Maswali Mazuri', labelSw: 'Maswali Mazuri kwa Daktari', labelEn: 'Helpful Questions' },
+                        { id: 'Uchambuzi wa Haraka', labelSw: 'Haraka Sana', labelEn: 'Fast Speed' },
+                        { id: 'Inahitaji Urahisi Zaidi', labelSw: 'Inahitaji Maneno Rahisi', labelEn: 'Needs Simpler Words' },
+                      ].map((tag) => {
+                        const isSelected = selectedTags.includes(tag.id);
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedTags(selectedTags.filter((t) => t !== tag.id));
+                              } else {
+                                setSelectedTags([...selectedTags, tag.id]);
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500 border-amber-600 text-slate-950 font-bold shadow-xs'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {isSelected ? '✓ ' : '+ '}
+                            {isSwahili ? tag.labelSw : tag.labelEn}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Optional Feedback Comments */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">
+                      {isSwahili ? 'Maoni au Mapendekezo ya Ziada (Hiari):' : 'Additional Feedback or Suggestions (Optional):'}
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={ratingComment}
+                      onChange={(e) => setRatingComment(e.target.value)}
+                      placeholder={
+                        isSwahili
+                          ? 'Andika maoni yako hapa ili kusaidia kuboresha...'
+                          : 'Write any specific thoughts or observations...'
+                      }
+                      className="w-full p-3 text-xs bg-slate-50 border-2 border-slate-200 rounded-xl focus:bg-white focus:border-amber-500 focus:outline-hidden transition"
+                      maxLength={600}
+                    />
+                  </div>
+
+                  {/* Admin Privacy Guarantee Notice */}
+                  <div className="p-3 rounded-xl bg-slate-100 border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
+                    <span className="font-bold text-amber-700 shrink-0">🔒 Faragha:</span>
+                    <span>
+                      {isSwahili
+                        ? 'Matokeo ya tathmini hii huonekana kwa Wasimamizi wa Mfumo (Admin Portal) pekee ili kusaidia wataalamu kuboresha mifumo ya afya.'
+                        : 'Rating results are private and accessible exclusively to system administrators in the Admin Portal to improve medical translation precision.'}
+                    </span>
+                  </div>
+
+                  {/* Submit / Cancel Buttons */}
+                  <div className="flex items-center gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRatingModal(false)}
+                      className="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                    >
+                      {isSwahili ? 'Ghairi' : 'Cancel'}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingRating}
+                      className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-98 text-slate-950 text-xs font-bold transition shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSubmittingRating ? (
+                        <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Star className="w-3.5 h-3.5 fill-current" />
+                      )}
+                      <span>{isSubmittingRating ? (isSwahili ? 'Inatuma...' : 'Submitting...') : (isSwahili ? 'Tuma Tathmini' : 'Submit Rating')}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
           </div>
         </div>
       )}
